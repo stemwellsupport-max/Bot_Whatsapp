@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stemwell - Panel de Administración</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #f4f6f9; }
+        .header { background: #1a73e8; color: white; padding: 20px; }
+        .header h1 { font-size: 24px; }
+        .container { max-width: 1200px; margin: 20px auto; padding: 0 20px; }
+        .section { background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .section h2 { color: #333; margin-bottom: 15px; border-bottom: 2px solid #1a73e8; padding-bottom: 10px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background: #f8f9fa; color: #555; }
+        .btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; }
+        .btn-primary { background: #1a73e8; color: white; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn:hover { opacity: 0.9; }
+        input, textarea { width: 100%; padding: 8px; margin: 5px 0; border: 1px solid #ddd; border-radius: 4px; }
+        .form-group { margin-bottom: 10px; }
+        .status { padding: 5px 10px; border-radius: 15px; font-size: 12px; }
+        .online { background: #d4edda; color: #155724; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🤖 Stemwell - Panel de Administración</h1>
+    </div>
+    <div class="container">
+        
+        <!-- Contactos -->
+        <div class="section">
+            <h2>📋 Contactos Registrados</h2>
+            <table id="tabla-contactos">
+                <thead>
+                    <tr><th>Nombre</th><th>Teléfono</th><th>Email</th><th>Último Mensaje</th></tr>
+                </thead>
+                <tbody id="body-contactos"><tr><td colspan="4">Cargando...</td></tr></tbody>
+            </table>
+        </div>
+
+        <!-- Base de Conocimiento -->
+        <div class="section">
+            <h2>📚 Base de Conocimiento</h2>
+            <div class="form-group">
+                <input type="text" id="kb-categoria" placeholder="Categoría (ej: Tratamientos)">
+                <input type="text" id="kb-pregunta" placeholder="Pregunta (ej: ¿Qué tratamientos ofrecen?)">
+                <textarea id="kb-respuesta" rows="3" placeholder="Respuesta..."></textarea>
+                <input type="text" id="kb-claves" placeholder="Palabras clave (separadas por coma)">
+                <button class="btn btn-primary" onclick="agregarArticulo()">➕ Agregar Artículo</button>
+            </div>
+            <table id="tabla-kb">
+                <thead>
+                    <tr><th>Categoría</th><th>Pregunta</th><th>Respuesta</th><th>Acciones</th></tr>
+                </thead>
+                <tbody id="body-kb"><tr><td colspan="4">Cargando...</td></tr></tbody>
+            </table>
+        </div>
+
+        <!-- Conversaciones -->
+        <div class="section">
+            <h2>💬 Conversaciones Recientes</h2>
+            <table id="tabla-conv">
+                <thead>
+                    <tr><th>Contacto</th><th>Teléfono</th><th>Último</th><th>Mensajes</th></tr>
+                </thead>
+                <tbody id="body-conv"><tr><td colspan="4">Cargando...</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Cargar contactos
+        async function cargarContactos() {
+            const res = await fetch('/admin/api/contactos');
+            const data = await res.json();
+            const tbody = document.getElementById('body-contactos');
+            if (data.ok && data.contactos.length > 0) {
+                tbody.innerHTML = data.contactos.map(c => 
+                    `<tr><td>${c.nombre || ''} ${c.apellido || ''}</td><td>${c.telefono}</td><td>${c.email || '-'}</td><td>${c.ultimo_msg ? new Date(c.ultimo_msg).toLocaleString('es-CO') : '-'}</td></tr>`
+                ).join('');
+            } else {
+                tbody.innerHTML = '<tr><td colspan="4">No hay contactos registrados</td></tr>';
+            }
+        }
+
+        // Cargar base de conocimiento
+        async function cargarKB() {
+            const res = await fetch('/admin/api/articulos');
+            const data = await res.json();
+            const tbody = document.getElementById('body-kb');
+            if (data.ok && data.articulos.length > 0) {
+                tbody.innerHTML = data.articulos.map(a => 
+                    `<tr><td>${a.categoria}</td><td>${a.pregunta}</td><td>${a.respuesta.substring(0, 100)}...</td>
+                    <td><button class="btn btn-danger" onclick="eliminarArticulo(${a.id})">🗑️</button></td></tr>`
+                ).join('');
+            } else {
+                tbody.innerHTML = '<tr><td colspan="4">No hay artículos en la base de conocimiento</td></tr>';
+            }
+        }
+
+        // Agregar artículo
+        async function agregarArticulo() {
+            const categoria = document.getElementById('kb-categoria').value;
+            const pregunta = document.getElementById('kb-pregunta').value;
+            const respuesta = document.getElementById('kb-respuesta').value;
+            const palabras_clave = document.getElementById('kb-claves').value;
+
+            if (!categoria || !pregunta || !respuesta) {
+                alert('Categoría, pregunta y respuesta son obligatorios');
+                return;
+            }
+
+            const res = await fetch('/admin/api/articulos', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ categoria, pregunta, respuesta, palabras_clave })
+            });
+            const data = await res.json();
+            if (data.ok) {
+                alert('✅ Artículo agregado correctamente');
+                cargarKB();
+                document.getElementById('kb-categoria').value = '';
+                document.getElementById('kb-pregunta').value = '';
+                document.getElementById('kb-respuesta').value = '';
+                document.getElementById('kb-claves').value = '';
+            } else {
+                alert('❌ Error: ' + data.error);
+            }
+        }
+
+        // Eliminar artículo
+        async function eliminarArticulo(id) {
+            if (confirm('¿Estás seguro de eliminar este artículo?')) {
+                const res = await fetch('/admin/api/articulos/' + id, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.ok) {
+                    cargarKB();
+                }
+            }
+        }
+
+        // Cargar conversaciones
+        async function cargarConversaciones() {
+            const res = await fetch('/admin/api/conversaciones');
+            const data = await res.json();
+            const tbody = document.getElementById('body-conv');
+            if (data.ok && data.conversaciones.length > 0) {
+                tbody.innerHTML = data.conversaciones.map(c => 
+                    `<tr><td>${c.nombre || 'Desconocido'}</td><td>${c.telefono}</td><td>${new Date(c.ultimo).toLocaleString('es-CO')}</td><td>${c.total_msgs} (📥${c.msgs_entrada} 📤${c.msgs_salida})</td></tr>`
+                ).join('');
+            } else {
+                tbody.innerHTML = '<tr><td colspan="4">No hay conversaciones</td></tr>';
+            }
+        }
+
+        // Cargar todo al iniciar
+        cargarContactos();
+        cargarKB();
+        cargarConversaciones();
+    </script>
+</body>
+</html>
