@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const path    = require('path');
 const { handleIncomingMessage } = require('./commands/handlers');
-const { initDB }                = require('./services/mysql');
+const { initDB }                = require('./services/postgres');
 const adminRouter               = require('./admin/router');
 
 const app          = express();

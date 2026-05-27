@@ -6,7 +6,7 @@ const {
   getAllArticulos, saveArticuloKB, updateArticuloKB, deleteArticuloKB,
   getCategorias, getContactos,
   getConversacionesRecientes, getMensajesDeContacto,
-} = require('../services/mysql');
+} = require('../services/postgres');
 
 // ── Servir panel HTML ─────────────────────────────────────
 router.get('/', (req, res) => {
