@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enseñar al Bot - Stemwell</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #f4f6f9; padding: 20px; }
+        .header { background: #1a73e8; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        .section { background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .pregunta-card { border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 8px; }
+        .pregunta-card h3 { color: #333; }
+        .pregunta-card small { color: #888; }
+        textarea { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px; min-height: 80px; }
+        .btn { padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+        .btn-primary { background: #1a73e8; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .stats { display: flex; gap: 20px; }
+        .stat { background: #e8f0fe; padding: 15px; border-radius: 8px; text-align: center; flex: 1; }
+        .stat h2 { color: #1a73e8; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🧠 Enseñar al Bot - Stemwell</h1>
+        <p>Aquí puedes ver las preguntas que el bot no supo responder y enseñarle.</p>
+    </div>
+
+    <div class="stats" id="stats"></div>
+
+    <div class="section">
+        <h2>📝 Preguntas sin responder</h2>
+        <div id="preguntas"></div>
+    </div>
+
+    <div class="section">
+        <h2>✅ Respuestas aprendidas</h2>
+        <div id="aprendidas"></div>
+    </div>
+
+    <script>
+        async function cargar() {
+            // Stats
+            const res = await fetch('/admin/api/aprender/stats');
+            const stats = await res.json();
+            document.getElementById('stats').innerHTML = `
+                <div class="stat"><h2>${stats.totalPreguntas || 0}</h2>Total preguntas</div>
+                <div class="stat"><h2>${stats.preguntasSinResponder || 0}</h2>Sin responder</div>
+                <div class="stat"><h2>${stats.respuestasAprendidas || 0}</h2>Aprendidas</div>
+            `;
+
+            // Preguntas sin responder
+            const resP = await fetch('/admin/api/aprender/pendientes');
+            const pendientes = await resP.json();
+            let html = '';
+            if (pendientes.length === 0) {
+                html = '<p style="color:green">✅ ¡No hay preguntas pendientes! El bot está al día.</p>';
+            }
+            pendientes.forEach(p => {
+                html += `
+                <div class="pregunta-card">
+                    <h3>${p.pregunta}</h3>
+                    <small>De: ${p.telefono} - ${new Date(p.fecha).toLocaleString('es-CO')}</small>
+                    <textarea id="resp-${p.pregunta.replace(/[^a-z0-9]/g,'')}" placeholder="Escribe la respuesta que el bot debe aprender..."></textarea>
+                    <button class="btn btn-success" onclick="ensenar('${p.pregunta.replace(/'/g, "\\'")}')">✅ Enseñar esta respuesta</button>
+                </div>`;
+            });
+            document.getElementById('preguntas').innerHTML = html;
+
+            // Aprendidas
+            const resA = await fetch('/admin/api/aprender/aprendidas');
+            const aprendidas = await resA.json();
+            let htmlA = '';
+            const entries = Object.entries(aprendidas);
+            if (entries.length === 0) {
+                htmlA = '<p>El bot aún no ha aprendido ninguna respuesta personalizada.</p>';
+            }
+            entries.slice(-10).reverse().forEach(([preg, resp]) => {
+                htmlA += `<div class="pregunta-card">
+                    <h3>❓ ${preg}</h3>
+                    <p>💬 ${resp.slice(0, 200)}...</p>
+                </div>`;
+            });
+            document.getElementById('aprendidas').innerHTML = htmlA;
+        }
+
+        async function ensenar(pregunta) {
+            const id = pregunta.replace(/[^a-z0-9]/g, '');
+            const respuesta = document.getElementById('resp-' + id).value;
+            if (!respuesta) return alert('Escribe una respuesta');
+            
+            const res = await fetch('/admin/api/aprender/ensenar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pregunta, respuesta })
+            });
+            const data = await res.json();
+            if (data.ok) {
+                alert('✅ ¡El bot aprendió esta respuesta!');
+                cargar();
+            }
+        }
+
+        cargar();
+    </script>
+</body>
+</html>

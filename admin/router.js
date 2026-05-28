@@ -1,6 +1,8 @@
 const express = require('express');
 const path    = require('path');
 const router  = express.Router();
+const { getEstadisticas, getPreguntasSinResponder, getTodasRespuestas, guardarRespuesta } = require('../rag/ml-engine');
+
 
 const {
   getAllArticulos, saveArticuloKB, updateArticuloKB, deleteArticuloKB,
@@ -78,6 +80,32 @@ router.get('/api/conversaciones/:telefono', async (req, res) => {
     );
     res.json({ ok: true, mensajes: msgs });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ═══════════════════════════════════════
+// APRENDIZAJE DEL BOT
+// ═══════════════════════════════════════
+router.get('/aprender', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'aprender.html'));
+});
+
+router.get('/api/aprender/stats', (req, res) => {
+  res.json(getEstadisticas());
+});
+
+router.get('/api/aprender/pendientes', (req, res) => {
+  res.json(getPreguntasSinResponder());
+});
+
+router.get('/api/aprender/aprendidas', (req, res) => {
+  res.json(getTodasRespuestas());
+});
+
+router.post('/api/aprender/ensenar', (req, res) => {
+  const { pregunta, respuesta } = req.body;
+  if (!pregunta || !respuesta) return res.status(400).json({ ok: false });
+  guardarRespuesta(pregunta, respuesta);
+  res.json({ ok: true });
 });
 
 module.exports = router;
