@@ -51,8 +51,8 @@ async function enviarSaludo(telefono, nombre) {
     await sendMessage(telefono,
       `🌿 *Stemwell Medicina Regenerativa*\n\n` +
       `¡Hola! Qué alegría que nos hayas escrito. 💚\n\n` +
-      `Soy *Sofía*, y estoy aquí para acompañarte, escucharte y orientarte en todo lo que necesites sobre medicina regenerativa.\n\n` +
-      `Para empezar con una atención más personalizada... ¿me compartes tu *nombre completo*?`
+      `Soy *Sofía*, y estoy aquí para acompañarte y orientarte en todo lo que necesites sobre medicina regenerativa.\n\n` +
+      `Para darte una atención más personalizada, ¿me compartes tu *nombre completo*?`
     );
     return;
   }
@@ -83,6 +83,7 @@ async function flujoDolor(telefono, texto, sesion, contacto) {
     else if (tl.includes('mano') || tl.includes('hand')) zona = en ? 'the hands' : 'las manos';
     else if (tl.includes('pie') || tl.includes('foot')) zona = en ? 'the feet' : 'los pies';
     else if (tl.includes('pierna') || tl.includes('leg')) zona = en ? 'the leg' : 'la pierna';
+    else if (tl.includes('fractura')) zona = en ? 'the fracture' : 'la fractura';
     else if (tl.includes('hernia')) zona = en ? 'a herniated disc' : 'una hernia discal';
     else if (tl.includes('artritis') || tl.includes('artrosis') || tl.includes('arthritis')) zona = en ? 'arthritis' : 'las articulaciones';
 
@@ -163,12 +164,15 @@ async function flujoAgendar(telefono, texto, sesion, contacto) {
   }
   if (!sesion.datos_confirmados) {
     setSesion(telefono, { paso: 'agenda_confirmar', datos_confirmados: false });
-    await sendButtons(telefono, `📋 *Confirmemos:*\n👤 ${contacto.nombre}\n📧 ${contacto.email}\n📱 ${telefono}\n\n¿Son correctos?`, ['✅ Sí', '✏️ Cambiar']);
+    await sendButtons(telefono, `📋 *Confirmemos tus datos:*\n\n👤 ${contacto.nombre}\n📧 ${contacto.email}\n📱 ${telefono}\n\n¿Son correctos?`, ['✅ Sí, son correctos', '✏️ Quiero cambiarlos']);
     return;
   }
   setSesion(telefono, { paso: 'inicio', quiere_agendar: true, datos_confirmados: true });
   await updateLeadData(telefono, { quiere_agendar: true, nivel_interes: 'hot' });
-  await sendButtons(telefono, `✅ *¡Listo, ${nombre}!*\n👤 ${contacto.nombre}\n📧 ${contacto.email}\n📱 ${telefono}\n\nAgenda:`, ['📅 Agendar ahora', '📞 Que me llamen']);
+  await sendButtons(telefono,
+    `✅ *¡Todo listo, ${nombre}!*\n\n👤 ${contacto.nombre}\n📧 ${contacto.email}\n📱 ${telefono}\n\nToca el botón para elegir tu fecha y hora 👇`,
+    ['📅 Abrir agenda']
+  );
 }
 
 async function handleIncomingMessage(message, contact) {
@@ -214,7 +218,7 @@ async function handleIncomingMessage(message, contact) {
       return;
     }
 
-    // RESPUESTAS RÁPIDAS EN FLUJOS (sin return, dejan continuar)
+    // RESPUESTAS RÁPIDAS EN FLUJOS (sin return)
     const enFlujo = sesion.paso && (sesion.paso.startsWith('dolor_') || sesion.paso === 'dolor_pedir_nombre' || sesion.paso === 'dolor_pedir_email' || sesion.paso === 'agenda_nombre' || sesion.paso === 'agenda_email' || sesion.paso === 'agenda_confirmar');
     if (enFlujo) {
       const np = contacto?.nombre?.split(' ')[0] || 'amig@';
@@ -242,14 +246,14 @@ async function handleIncomingMessage(message, contact) {
       if (!texto.includes('@') || !texto.includes('.')) { await sendMessage(telefono, `No parece válido. Revisa.`); return; }
       await saveContacto({ nombre: contacto?.nombre || '', apellido: '', email: texto, telefono });
       setSesion(telefono, { paso: 'agenda_confirmar', datos_confirmados: false });
-      await sendButtons(telefono, `📋 *Confirmemos:*\n👤 ${contacto?.nombre || texto}\n📧 ${texto}\n📱 ${telefono}\n\n¿Correctos?`, ['✅ Sí', '✏️ Cambiar']);
+      await sendButtons(telefono, `📋 *Confirmemos tus datos:*\n\n👤 ${contacto?.nombre || texto}\n📧 ${texto}\n📱 ${telefono}\n\n¿Son correctos?`, ['✅ Sí, son correctos', '✏️ Quiero cambiarlos']);
       return;
     }
     if (sesion.paso === 'agenda_confirmar') {
       if (tl.includes('sí') || tl.includes('correcto') || tl.includes('✅')) {
         setSesion(telefono, { paso: 'inicio', quiere_agendar: true, datos_confirmados: true });
         await updateLeadData(telefono, { quiere_agendar: true, nivel_interes: 'hot' });
-        await sendButtons(telefono, `✅ *¡Listo!*\n👤 ${contacto?.nombre}\n📧 ${contacto?.email}\n📱 ${telefono}\n\nAgenda:`, ['📅 Agendar ahora', '📞 Que me llamen']);
+        await sendButtons(telefono, `✅ *¡Todo listo, ${contacto?.nombre?.split(' ')[0]}!*\n\n👤 ${contacto?.nombre}\n📧 ${contacto?.email}\n📱 ${telefono}\n\nToca el botón para elegir tu fecha y hora 👇`, ['📅 Abrir agenda']);
         return;
       }
       if (tl.includes('cambiar') || tl.includes('✏️') || tl.includes('no')) {
@@ -260,25 +264,27 @@ async function handleIncomingMessage(message, contact) {
     }
 
     // BOTONES PRINCIPALES
-    if (tl.includes('agendar mi evaluación') || tl.includes('agendar evaluación')) { await flujoAgendar(telefono, texto, sesion, contacto); return; }
-    if (tl.includes('dolor') || tl.includes('lesión') || tl.includes('🦵') || tl.includes('pain') || tl.includes('therapy')) { await flujoDolor(telefono, texto, sesion, contacto); return; }
-    if (tl.includes('agendar') || tl.includes('cita') || tl.includes('📅')) { await flujoAgendar(telefono, texto, sesion, contacto); return; }
+    if (tl.includes('abrir agenda') || tl.includes('📅')) {
+      await sendMessage(telefono, `🗓️ *Reserva tu evaluación SIN COSTO aquí:*\n\n👉 ${AGENDA_URL}\n\nSolo toma 2 minutos. Elige el día y hora que prefieras.\n\n¡Te esperamos! 💚`);
+      setSesion(telefono, { paso: 'inicio' });
+      return;
+    }
+    if (tl.includes('dolor') || tl.includes('lesión') || tl.includes('🦵') || tl.includes('pain') || tl.includes('therapy') || tl.includes('fractura')) { await flujoDolor(telefono, texto, sesion, contacto); return; }
+    if (tl.includes('agendar mi evaluación') || tl.includes('agendar evaluación') || tl.includes('agendar') || tl.includes('cita')) { await flujoAgendar(telefono, texto, sesion, contacto); return; }
     if (tl.includes('asesor') || tl.includes('hablar') || tl.includes('💬')) {
       await sendButtons(telefono, `👨‍⚕️ *Con mucho gusto.*\n📞 (+57) 311 501 1920\n🕘 Lun–Vie 8am–6pm`, ['📞 Que me llamen', '✅ Ya llamo']);
       return;
     }
 
-    // ═══════════════════════════
-    // IA LOCAL (LM STUDIO)
-    // ═══════════════════════════
-    const respuestaIA = await responderConIA(texto, contacto?.nombre || nombre);
+    // IA LOCAL (Qwen)
+    const respuestaIA = await responderConIA(texto, contacto?.nombre || nombre, telefono);
     if (respuestaIA) {
       await sendMessage(telefono, respuestaIA);
       await logMensaje(telefono, nombre, 'salida', respuestaIA);
       await pausaNatural();
       await sendButtons(telefono,
-        'Si deseas, puedes seguir escribiendo tus preguntas aquí abajo. Cuando estés listo, también puedes agendar tu evaluación SIN COSTO tocando el botón. 😊',
-        ['📅 Agendar mi evaluación gratuita']
+        '¿Te queda alguna duda? Puedes seguir escribiendo 👇\nCuando estés listo/a, agenda tu evaluación SIN COSTO. 😊',
+        ['📅 Agendar evaluación']
       );
       return;
     }
