@@ -59,6 +59,39 @@ async function initDB() {
       );
     `);
 
+    // 🆕 TABLA DE CONOCIMIENTO APRENDIDO POR IA
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ia_conocimiento (
+        id                  SERIAL PRIMARY KEY,
+        pregunta_original   TEXT NOT NULL,
+        pregunta_normalizada VARCHAR(500) NOT NULL,
+        respuesta           TEXT NOT NULL,
+        idioma              VARCHAR(5) DEFAULT 'es',
+        veces_usada         INT DEFAULT 1,
+        ultima_uso          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        creado_en           TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        confianza           FLOAT DEFAULT 0.5,
+        activo              BOOLEAN DEFAULT TRUE,
+        UNIQUE(pregunta_normalizada)
+      );
+    `);
+
+    // Índices para búsqueda rápida
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_pregunta_normalizada 
+      ON ia_conocimiento(pregunta_normalizada);
+    `);
+    
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_ia_conocimiento_activo 
+      ON ia_conocimiento(activo, idioma);
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_ia_conocimiento_confianza 
+      ON ia_conocimiento(confianza DESC, veces_usada DESC);
+    `);
+
     console.log('✅ Tablas PostgreSQL verificadas/creadas');
   } finally {
     client.release();
@@ -127,7 +160,7 @@ async function updateLeadData(telefono, data) {
   ).catch(() => {});
 }
 
-// ── BASE DE CONOCIMIENTO ──────────────────────────────────
+// ── BASE DE CONOCIMIENTO (KB) ──────────────────────────────────
 async function buscarEnKB(texto) {
   const limpio   = texto.replace(/[^a-záéíóúüñA-ZÁÉÍÓÚÜÑ0-9 ]/g,' ').trim();
   const palabras = limpio.split(' ').filter(p => p.length > 2);
@@ -208,10 +241,204 @@ async function getMensajesDeContacto(telefono, limite=100) {
   return r.rows;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 🆕 FUNCIONES DE HISTORIAL PARA IA
+// ═══════════════════════════════════════════════════════════════════════════
+async function getHistorialMensajes(telefono, limite = 10) {
+  try {
+    const result = await pool.query(
+      `SELECT mensaje, direccion, fecha 
+       FROM wa_conversaciones 
+       WHERE telefono = $1 
+       ORDER BY fecha DESC 
+       LIMIT $2`,
+      [telefono, limite]
+    );
+    return result.rows.reverse();
+  } catch (error) {
+    console.error('❌ [getHistorialMensajes] Error:', error.message);
+    return [];
+  }
+}
+
+async function guardarMensajeRAG(telefono, mensaje, rol) {
+  return logMensaje(telefono, '', rol, mensaje);
+}
+
+async function getHistorialRAG(telefono, limite = 10) {
+  return getHistorialMensajes(telefono, limite);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🧠 FUNCIONES DE APRENDIZAJE AUTOMÁTICO
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Normalizar pregunta para búsqueda
+function normalizarPregunta(pregunta) {
+  return pregunta
+    .toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[¿?¡!.,;:()\[\]{}]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Buscar en conocimiento aprendido
+async function buscarEnConocimiento(pregunta, idioma) {
+  const preguntaNorm = normalizarPregunta(pregunta);
+  const palabras = preguntaNorm.split(' ').filter(p => p.length > 3);
+  
+  if (palabras.length === 0) return null;
+  
+  const condiciones = palabras.map((_, i) => 
+    `pregunta_normalizada LIKE $${i + 1}`
+  ).join(' OR ');
+  
+  const params = palabras.map(p => `%${p}%`);
+  params.push(idioma);
+  
+  const result = await pool.query(
+    `SELECT * FROM ia_conocimiento 
+     WHERE activo = TRUE 
+       AND idioma = $${params.length}
+       AND (${condiciones})
+     ORDER BY veces_usada DESC, confianza DESC 
+     LIMIT 1`,
+    params
+  );
+  
+  if (result.rows.length > 0) {
+    await pool.query(
+      `UPDATE ia_conocimiento 
+       SET veces_usada = veces_usada + 1, 
+           ultima_uso = NOW() 
+       WHERE id = $1`,
+      [result.rows[0].id]
+    );
+    return result.rows[0];
+  }
+  
+  return null;
+}
+
+// Guardar nueva respuesta aprendida
+async function guardarConocimiento(pregunta, respuesta, idioma, confianza = 0.7) {
+  const preguntaNorm = normalizarPregunta(pregunta);
+  
+  const existente = await pool.query(
+    `SELECT * FROM ia_conocimiento WHERE pregunta_normalizada = $1`,
+    [preguntaNorm]
+  );
+  
+  if (existente.rows.length > 0) {
+    await pool.query(
+      `UPDATE ia_conocimiento 
+       SET respuesta = $1, 
+           confianza = (confianza + $2) / 2,
+           ultima_uso = NOW()
+       WHERE id = $3`,
+      [respuesta, confianza, existente.rows[0].id]
+    );
+    return existente.rows[0].id;
+  }
+  
+  const result = await pool.query(
+    `INSERT INTO ia_conocimiento 
+     (pregunta_original, pregunta_normalizada, respuesta, idioma, confianza)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING id`,
+    [pregunta, preguntaNorm, respuesta, idioma, confianza]
+  );
+  
+  console.log(`📚 [Aprendizaje] Nueva pregunta guardada: "${pregunta.substring(0, 50)}..."`);
+  return result.rows[0].id;
+}
+
+// Incrementar confianza de una respuesta
+async function aumentarConfianza(id) {
+  await pool.query(
+    `UPDATE ia_conocimiento 
+     SET confianza = LEAST(confianza + 0.1, 1.0)
+     WHERE id = $1`,
+    [id]
+  );
+}
+
+// Obtener estadísticas de aprendizaje
+async function getEstadisticasAprendizaje() {
+  const result = await pool.query(`
+    SELECT 
+      COUNT(*) as total,
+      SUM(veces_usada) as usos_totales,
+      AVG(confianza) as confianza_promedio,
+      idioma,
+      COUNT(*) FILTER (WHERE confianza > 0.8) as alta_confianza
+    FROM ia_conocimiento 
+    WHERE activo = TRUE
+    GROUP BY idioma
+  `);
+  return result.rows;
+}
+
+// Listar todo el conocimiento aprendido
+async function listarConocimiento(limite = 100) {
+  const result = await pool.query(`
+    SELECT id, pregunta_original, respuesta, idioma, veces_usada, confianza, ultima_uso
+    FROM ia_conocimiento 
+    WHERE activo = TRUE
+    ORDER BY confianza DESC, veces_usada DESC
+    LIMIT $1
+  `, [limite]);
+  return result.rows;
+}
+
+// Eliminar conocimiento (si es incorrecto)
+async function eliminarConocimiento(id) {
+  await pool.query(
+    `UPDATE ia_conocimiento SET activo = FALSE WHERE id = $1`,
+    [id]
+  );
+  console.log(`🗑️ [Aprendizaje] Conocimiento ID ${id} desactivado`);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 📤 EXPORTAR TODO
+// ═══════════════════════════════════════════════════════════════════════════
 module.exports = {
+  // Inicialización
   initDB, pool,
-  saveContacto, getContactoByTelefono, getContactos, upsertContactoBasico, updateLeadData,
-  buscarEnKB, getCategorias, getAllArticulos,
-  saveArticuloKB, updateArticuloKB, deleteArticuloKB,
-  logMensaje, getConversacionesRecientes, getMensajesDeContacto,
+  
+  // Contactos
+  saveContacto, 
+  getContactoByTelefono, 
+  getContactos, 
+  upsertContactoBasico, 
+  updateLeadData,
+  
+  // Base de conocimiento KB
+  buscarEnKB, 
+  getCategorias, 
+  getAllArticulos,
+  saveArticuloKB, 
+  updateArticuloKB, 
+  deleteArticuloKB,
+  
+  // Conversaciones
+  logMensaje, 
+  getConversacionesRecientes, 
+  getMensajesDeContacto,
+  
+  // Historial para IA
+  getHistorialMensajes,
+  guardarMensajeRAG,
+  getHistorialRAG,
+  
+  // 🧠 APRENDIZAJE AUTOMÁTICO (nuevas funciones)
+  normalizarPregunta,
+  buscarEnConocimiento,
+  guardarConocimiento,
+  aumentarConfianza,
+  getEstadisticasAprendizaje,
+  listarConocimiento,
+  eliminarConocimiento,
 };

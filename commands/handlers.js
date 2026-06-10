@@ -15,12 +15,253 @@ function pausaNatural() {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// ============================================================
+// 🌍 DETECTOR DE IDIOMA MEJORADO (CORREGIDO)
+// ============================================================
 function detectarIdioma(texto) {
-  const ingles = ['hi', 'hello', 'hey', 'what', 'how', 'where', 'when', 'why', 'who', 'can', 'do', 'does', 'is', 'are', 'will', 'would', 'could', 'should', 'my', 'your', 'please', 'thanks', 'help', 'need', 'want', 'know', 'tell', 'about', 'price', 'cost', 'pain', 'work', 'cell', 'stem', 'video', 'instagram', 'the', 'and', 'for', 'this', 'that', 'have', 'has', 'been', 'was', 'were', 'feel', 'feeling', 'therapy', 'therapies', 'physical', 'since', 'years', 'months', 'weeks', 'days', 'much', 'many', 'some', 'any', 'but', 'because', 'also', 'very', 'really', 'still', 'always', 'never', 'sometimes', 'maybe', 'just', 'now', 'today', 'yesterday', 'tomorrow'];
-  const palabras = texto.toLowerCase().split(' ');
-  const coincidencias = palabras.filter(p => ingles.includes(p));
-  if (coincidencias.length >= 1) return 'en';
+  const mensaje = texto.toLowerCase().trim();
+  
+  // 🔥 CASOS ESPECIALES: saludos muy cortos en inglés
+  const saludosInglesCortos = ['hi', 'hello', 'hey', 'sup', 'yo', 'hi!', 'hello!', 'hey!'];
+  if (saludosInglesCortos.includes(mensaje)) {
+    return 'en';
+  }
+  
+  // Saludos en español cortos
+  const saludosEspanolCortos = ['hola', 'buenas', 'hola!', 'buenas!'];
+  if (saludosEspanolCortos.includes(mensaje)) {
+    return 'es';
+  }
+  
+  // Palabras clave en inglés (ampliado)
+  const ingles = [
+    'hello', 'hi', 'hey', 'what', 'how', 'where', 'when', 'why', 'who', 
+    'can', 'do', 'does', 'is', 'are', 'will', 'would', 'could', 'should', 
+    'my', 'your', 'please', 'thanks', 'thank', 'help', 'need', 'want', 
+    'know', 'tell', 'about', 'price', 'cost', 'pain', 'work', 'cell', 
+    'stem', 'video', 'instagram', 'the', 'and', 'for', 'this', 'that', 
+    'have', 'has', 'been', 'was', 'were', 'feel', 'feeling', 'therapy', 
+    'therapies', 'physical', 'since', 'years', 'months', 'weeks', 'days', 
+    'much', 'many', 'some', 'any', 'but', 'because', 'also', 'very', 
+    'really', 'still', 'always', 'never', 'sometimes', 'maybe', 'just', 
+    'now', 'today', 'yesterday', 'tomorrow', 'does it work', 'is it effective',
+    'how does', 'tell me', 'explain', 'results', 'effective', 'works'
+  ];
+  
+  // Palabras clave en español
+  const espanol = [
+    'hola', 'buenas', 'cómo', 'cómo estás', 'gracias', 'ayuda', 'necesito', 
+    'quiero', 'saber', 'dime', 'precio', 'costo', 'dolor', 'funciona', 
+    'sirve', 'tratamiento', 'célula', 'madre', 'terapia', 'años', 'meses',
+    'semanas', 'días', 'porque', 'pero', 'muy', 'realmente', 'siempre',
+    'nunca', 'ahora', 'hoy', 'mañana', 'ayer'
+  ];
+  
+  // Contar coincidencias
+  let scoreIngles = 0;
+  let scoreEspanol = 0;
+  
+  for (const palabra of ingles) {
+    if (mensaje.includes(palabra)) scoreIngles++;
+  }
+  
+  for (const palabra of espanol) {
+    if (mensaje.includes(palabra)) scoreEspanol++;
+  }
+  
+  // Si hay más inglés o el mensaje comienza con saludo inglés
+  const comienzaConIngles = /^(hello|hi|hey|good morning|good afternoon)/i.test(mensaje);
+  
+  if (comienzaConIngles || scoreIngles > scoreEspanol) {
+    return 'en';
+  }
+  
   return 'es';
+}
+
+// ============================================================
+// 🧠 RESPUESTAS EN INGLÉS
+// ============================================================
+function getRespuestaIngles(tipo, variables = {}) {
+  const respuestas = {
+    saludo: `🌿 *Stemwell Regenerative Medicine*
+
+Hello! 👋 I'm Sofía, your virtual assistant.
+
+How can I help you today? You can ask me about:
+• Stem cell treatments
+• PRP (Platelet-Rich Plasma)
+• Exosomes
+• Hyperbaric chamber
+• Longevity protocols
+• Costs and free evaluation
+
+Or just tell me what you're looking for! 😊`,
+
+    funciona: `🔍 *Does it work? Great question!*
+
+The effectiveness of regenerative treatments *varies for each specific case*: your condition, how long you've had it, age, overall health, etc.
+
+📊 *What we CAN tell you with certainty:*
+• Over 30,000 scientific studies support mesenchymal stem cells
+• Many patients report significant improvement
+• NOT all patients respond the same way
+
+✅ *The ONLY way to know if YOU are a candidate is with a real evaluation:*
+
+🗓️ *Schedule a consultation with Dr. Camilo White or Sandra*
+👉 *FREE initial evaluation*
+👉 They will review YOUR specific case
+
+🔗 *Book here (takes 1 minute):* ${AGENDA_URL}`,
+
+    comoAplican: `💉 *How are these procedures applied?*
+
+*🩸 Mesenchymal Stem Cells (from umbilical cord):*
+• Extracted from donated umbilical cord tissue
+• Prepared in our laboratory
+• Administered intravenously (IV) or locally via ultrasound
+• Helps regenerate tissues and reduce inflammation
+
+*💉 Platelet-Rich Plasma (PRP):*
+• Small blood sample taken from YOU
+• Processed in centrifuge to concentrate platelets
+• Re-injected into the affected area
+• Stimulates natural growth factors for tissue repair
+
+*💊 IV Therapy:*
+• Custom vitamin and antioxidant blend
+• Administered intravenously
+• Restores energy and supports regeneration
+
+✨ *Want to know which procedure is right for YOU?*
+🔗 *Schedule a FREE evaluation:* ${AGENDA_URL}`,
+
+    precios: `💰 *About treatment costs*
+
+Prices vary according to:
+• Type of procedure
+• Number of sessions needed
+• Your personalized plan
+
+*The most transparent I can be:*
+Sandra or Dr. Camilo White will give you a DETAILED budget after the initial evaluation (which is FREE).
+
+🔗 *Schedule your FREE evaluation here:* ${AGENDA_URL}`,
+
+    derivacion: `👩‍⚕️ *That's an excellent question for our specialists.*
+
+As a virtual assistant, I can give you general information, but *Sandra or Dr. Camilo White* can:
+• Review your specific medical history
+• Evaluate if you are a REAL candidate
+• Explain risks and benefits FOR YOUR CASE
+
+📌 *The initial evaluation is FREE*
+🔗 *Book here:* ${AGENDA_URL}`,
+
+    porDefecto: `📋 *Thank you for your interest in Stemwell.*
+
+For *precise answers about YOUR CASE*, it's best to talk directly with:
+
+👨‍⚕️ *Dr. Camilo White* - Medical Director
+👩‍⚕️ *Sandra* - Clinical Advisor
+
+🔗 *Schedule a FREE evaluation:* ${AGENDA_URL}
+
+Do you have any other questions? I'm here to help. 💙`
+  };
+  
+  return respuestas[tipo] || respuestas.porDefecto;
+}
+
+// ============================================================
+// 🧠 RESPUESTAS EN ESPAÑOL
+// ============================================================
+function getRespuestaEspanol(tipo, variables = {}) {
+  const respuestas = {
+    saludo: `🌿 *Stemwell Medicina Regenerativa*
+
+¡Hola! 👋 Soy Sofía, tu asistente virtual.
+
+¿Cómo puedo ayudarte hoy? Puedes preguntarme sobre:
+• Tratamientos con células madre
+• PRP (Plasma Rico en Plaquetas)
+• Exosomas
+• Cámara hiperbárica
+• Protocolos de longevidad
+• Costos y evaluación gratuita
+
+¡O simplemente cuéntame qué estás buscando! 😊`,
+
+    funciona: `🔍 *Excelente pregunta, es muy importante.*
+
+La efectividad de los tratamientos regenerativos *varía según cada caso específico*.
+
+📊 *Lo que sí podemos decirte:*
+• Más de 30,000 estudios científicos respaldan las células madre
+• Muchos pacientes reportan mejoría significativa
+• NO todos los pacientes responden igual
+
+✅ *La única forma de saber si ERES CANDIDATO es con una evaluación real:*
+
+🗓️ *Agenda una cita de valoración SIN COSTO con el Dr. Camilo White o Sandra*
+🔗 *Reserva aquí:* ${AGENDA_URL}`,
+
+    comoAplican: `💉 *¿Cómo se aplican estos procedimientos?*
+
+*🩸 Células Madre Mesenquimales:*
+• Se extraen del cordón umbilical donado
+• Se preparan en laboratorio
+• Se administran por vía intravenosa o local
+• Regeneran tejidos y reducen inflamación
+
+*💉 Plasma Rico en Plaquetas (PRP):*
+• Se toma una muestra de TU sangre
+• Se procesa en centrífuga
+• Se reinyecta en el área afectada
+
+*💊 Sueroterapia:*
+• Mezcla personalizada de vitaminas
+• Se administra por vía intravenosa
+
+✨ *¿Quieres saber qué procedimiento es ideal para TI?*
+🔗 *Agenda evaluación SIN COSTO:* ${AGENDA_URL}`,
+
+    precios: `💰 *Sobre los costos*
+
+Los precios varían según:
+• Tipo de procedimiento
+• Número de sesiones
+• Tu plan personalizado
+
+*Lo más transparente:*
+Sandra o el Dr. Camilo White te darán un presupuesto DETALLADO tras la evaluación inicial (SIN COSTO).
+
+🔗 *Agenda tu evaluación gratuita aquí:* ${AGENDA_URL}`,
+
+    derivacion: `👩‍⚕️ *Excelente pregunta para nuestros especialistas.*
+
+*Sandra o el Dr. Camilo White* pueden:
+• Revisar tu caso específico
+• Evaluar si eres candidato real
+• Explicarte riesgos y beneficios
+
+📌 *Evaluación inicial SIN COSTO*
+🔗 *Agenda aquí:* ${AGENDA_URL}`,
+
+    porDefecto: `📋 *Gracias por tu interés en Stemwell.*
+
+Para respuestas *precisas sobre TU CASO*, lo mejor es que hables con:
+
+👨‍⚕️ *Dr. Camilo White* - Director médico
+👩‍⚕️ *Sandra* - Asesora clínica
+
+🔗 *Agenda una cita de valoración SIN COSTO:* ${AGENDA_URL}
+
+¿Tienes otra pregunta? Estoy para ayudarte. 💙`
+  };
+  
+  return respuestas[tipo] || respuestas.porDefecto;
 }
 
 function resumirTexto(texto) {
@@ -44,8 +285,8 @@ function resumirTexto(texto) {
 
 async function enviarSaludo(telefono, nombre) {
   await pausaNatural();
-  const n = nombre.split(' ')[0] || '';
-  const nombreInvalido = !n || n === '' || n === 'Paciente' || n.toLowerCase() === 'hola';
+  const n = nombre?.split(' ')[0] || '';
+  const nombreInvalido = !n || n === '' || n === 'Paciente' || n.toLowerCase() === 'hola' || n.toLowerCase() === 'hi' || n.toLowerCase() === 'hello';
   
   if (nombreInvalido) {
     await sendMessage(telefono,
@@ -64,14 +305,24 @@ async function enviarSaludo(telefono, nombre) {
   );
 }
 
+async function enviarSaludoIngles(telefono, nombre) {
+  await pausaNatural();
+  await sendButtons(telefono,
+    `🌿 *Stemwell Regenerative Medicine*\n\n` +
+    `Hello! 👋 I'm Sofía, your virtual assistant.\n\n` +
+    `How can I help you today?`,
+    ['🦵 I have pain', '🧠 Neurology', '✨ Longevity', '📅 Book appointment', '💬 Speak with someone']
+  );
+}
+
 async function flujoDolor(telefono, texto, sesion, contacto) {
-  const nombre = (contacto?.nombre || 'Paciente').split(' ')[0];
+  const nombre = (contacto?.nombre || 'Patient').split(' ')[0];
   const tl = texto.toLowerCase();
   const en = detectarIdioma(texto) === 'en';
 
   if (!sesion.dolor_descripcion) {
     await pausaNatural();
-    let zona = 'articular';
+    let zona = en ? 'joint' : 'articular';
     if (tl.includes('rodilla') || tl.includes('knee')) zona = en ? 'the knee' : 'la rodilla';
     else if (tl.includes('cadera') || tl.includes('hip')) zona = en ? 'the hip' : 'la cadera';
     else if (tl.includes('hombro') || tl.includes('shoulder')) zona = en ? 'the shoulder' : 'el hombro';
@@ -80,53 +331,71 @@ async function flujoDolor(telefono, texto, sesion, contacto) {
     else if (tl.includes('codo') || tl.includes('elbow')) zona = en ? 'the elbow' : 'el codo';
     else if (tl.includes('muñeca') || tl.includes('wrist')) zona = en ? 'the wrist' : 'la muñeca';
     else if (tl.includes('tobillo') || tl.includes('ankle')) zona = en ? 'the ankle' : 'el tobillo';
-    else if (tl.includes('mano') || tl.includes('hand')) zona = en ? 'the hands' : 'las manos';
-    else if (tl.includes('pie') || tl.includes('foot')) zona = en ? 'the feet' : 'los pies';
-    else if (tl.includes('pierna') || tl.includes('leg')) zona = en ? 'the leg' : 'la pierna';
-    else if (tl.includes('fractura')) zona = en ? 'the fracture' : 'la fractura';
-    else if (tl.includes('hernia')) zona = en ? 'a herniated disc' : 'una hernia discal';
     else if (tl.includes('artritis') || tl.includes('artrosis') || tl.includes('arthritis')) zona = en ? 'arthritis' : 'las articulaciones';
 
     setSesion(telefono, { paso: 'dolor_tiempo', dolor_descripcion: texto, dolor_zona: zona });
     await sendMessage(telefono,
       en
-        ? `✨ *${nombre}*, thank you for trusting me with your pain in *${zona}*.\n\nHow long have you been dealing with this?`
-        : `✨ *${nombre}*, gracias por abrirte conmigo y contarme sobre tu dolor en *${zona}*.\n\nSé que vivir con dolor no es fácil, y quiero que sepas que estoy aquí para ayudarte.\n\n¿Hace cuánto tiempo comenzó esta molestia?`
+        ? `✨ *${nombre}*, thank you for sharing about your pain in *${zona}*.\n\nHow long have you been dealing with this?`
+        : `✨ *${nombre}*, gracias por contarme sobre tu dolor en *${zona}*.\n\n¿Hace cuánto tiempo comenzó esta molestia?`
     );
     return;
   }
+  
   if (!sesion.dolor_tiempo) {
     setSesion(telefono, { paso: 'dolor_tratamientos', dolor_tiempo: texto });
-    await sendMessage(telefono, en ? `Thank you. Have you tried any treatments so far?` : `Gracias por compartirlo. 🙏\n\n¿Has intentado algún tratamiento hasta ahora? Medicamentos, fisioterapia, cirugía...`);
+    await sendMessage(telefono, 
+      en ? `Thank you. Have you tried any treatments so far?` : 
+      `Gracias. 🙏\n\n¿Has intentado algún tratamiento hasta ahora?`
+    );
     return;
   }
+  
   if (!sesion.dolor_tratamientos) {
     setSesion(telefono, { paso: 'dolor_impacto', dolor_tratamientos: texto });
-    await sendMessage(telefono, en ? `I understand. How does this pain affect your daily life?` : `Vaya, ${nombre}. Has pasado por varias cosas ya... 😔\n\n¿Cómo impacta este dolor en tu día a día?`);
+    await sendMessage(telefono, 
+      en ? `I understand. How does this pain affect your daily life?` : 
+      `Vaya, ${nombre}. ¿Cómo impacta este dolor en tu día a día?`
+    );
     return;
   }
+  
   if (!sesion.dolor_impacto) {
-    const nombreEsGenerico = !contacto?.nombre || contacto.nombre === '' || contacto.nombre === 'Paciente';
+    const nombreEsGenerico = !contacto?.nombre || contacto.nombre === '' || contacto.nombre === 'Patient';
     const tieneEmail = contacto?.email && contacto.email !== '';
+    
     if (nombreEsGenerico) {
       setSesion(telefono, { paso: 'dolor_pedir_nombre', dolor_impacto: texto, menciono_dolor: true });
-      await sendMessage(telefono, en ? `✨ I need your *full name*:` : `✨ Gracias por compartir tu historia.\n\nAntes de continuar, necesito tu *nombre completo*:`);
+      await sendMessage(telefono, 
+        en ? `✨ I need your *full name*:` : 
+        `✨ Antes de continuar, necesito tu *nombre completo*:`
+      );
       return;
     }
+    
     if (!tieneEmail) {
       setSesion(telefono, { paso: 'dolor_pedir_email', dolor_impacto: texto, menciono_dolor: true });
-      await sendMessage(telefono, en ? `Thank you. Now your *email*:` : `Gracias, ${contacto.nombre.split(' ')[0]}. 🙏\n\nAhora necesito tu *correo electrónico*:`);
+      await sendMessage(telefono, 
+        en ? `Thank you. Now your *email*:` : 
+        `Gracias, ${contacto.nombre.split(' ')[0]}. 🙏\n\nAhora tu *correo electrónico*:`
+      );
       return;
     }
+    
     await enviarOfertaFinal(telefono, nombre, sesion, contacto, en);
     return;
   }
+  
   if (sesion.paso === 'dolor_pedir_nombre') {
     await saveContacto({ nombre: texto, apellido: '', email: contacto?.email || '', telefono });
     setSesion(telefono, { paso: 'dolor_pedir_email', dolor_impacto: sesion.dolor_impacto, menciono_dolor: true });
-    await sendMessage(telefono, en ? `Thank you. Now your *email*:` : `Gracias, *${texto.split(' ')[0]}*. 🙏\n\nAhora tu *correo electrónico*:`);
+    await sendMessage(telefono, 
+      en ? `Thank you. Now your *email*:` : 
+      `Gracias, *${texto.split(' ')[0]}*. 🙏\n\nAhora tu *correo electrónico*:`
+    );
     return;
   }
+  
   if (sesion.paso === 'dolor_pedir_email') {
     if (!texto.includes('@') || !texto.includes('.')) {
       await sendMessage(telefono, en ? `That email doesn't seem valid.` : `Ese correo no parece válido. Revisa.`);
@@ -142,116 +411,175 @@ async function flujoDolor(telefono, texto, sesion, contacto) {
 async function enviarOfertaFinal(telefono, nombre, sesion, contacto, en = false) {
   setSesion(telefono, { paso: 'inicio', menciono_dolor: true });
   await updateLeadData(telefono, { interes: 'dolor', dolor_principal: sesion.dolor_zona, nivel_interes: 'hot' });
+  
   await sendButtons(telefono,
     en
       ? `✨ *${nombre}*, here's what I understood:\n• Pain in *${sesion.dolor_zona}*\n• Duration: *${resumirTexto(sesion.dolor_tiempo)}*\n• Treatments: *${resumirTexto(sesion.dolor_tratamientos)}*\n\nAt Stemwell, the first step is a *FREE evaluation* with Dr. Camilo White.\n\nShall we schedule?`
       : `✨ *${nombre}*, esto es lo que entendí:\n• Dolor en *${sesion.dolor_zona}*\n• Tiempo: *${resumirTexto(sesion.dolor_tiempo)}*\n• Tratamientos: *${resumirTexto(sesion.dolor_tratamientos)}*\n\nEn Stemwell, el primer paso es una *evaluación SIN COSTO* con el Dr. Camilo White.\n\n¿Agendamos?`,
-    ['✅ Sí, agendar', '📞 Que me llamen', '📋 Más info']
+    en ? ['✅ Yes, schedule', '📞 Call me', '📋 More info'] : ['✅ Sí, agendar', '📞 Que me llamen', '📋 Más info']
   );
 }
 
 async function flujoAgendar(telefono, texto, sesion, contacto) {
-  const nombre = (contacto?.nombre || 'Paciente').split(' ')[0];
-  if (!contacto?.nombre || contacto.nombre === '' || contacto.nombre === 'Paciente') {
+  const nombre = (contacto?.nombre || 'Patient').split(' ')[0];
+  const en = detectarIdioma(texto) === 'en';
+  
+  if (!contacto?.nombre || contacto.nombre === '' || contacto.nombre === 'Patient') {
     setSesion(telefono, { paso: 'agenda_nombre' });
-    await sendMessage(telefono, `🌟 ¡Qué bueno! Para agendar tu *evaluación gratuita*, necesito tu *nombre completo*:`);
+    await sendMessage(telefono, 
+      en ? `🌟 Great! To schedule your *FREE evaluation*, I need your *full name*:` : 
+      `🌟 ¡Qué bueno! Para agendar tu *evaluación gratuita*, necesito tu *nombre completo*:`
+    );
     return;
   }
+  
   if (!contacto?.email || contacto.email === '') {
     setSesion(telefono, { paso: 'agenda_email' });
-    await sendMessage(telefono, `Gracias, ${nombre}. 🙏\n\nAhora tu *correo electrónico*:`);
+    await sendMessage(telefono, 
+      en ? `Thank you, ${nombre}. 🙏\n\nNow your *email*:` : 
+      `Gracias, ${nombre}. 🙏\n\nAhora tu *correo electrónico*:`
+    );
     return;
   }
+  
   if (!sesion.datos_confirmados) {
     setSesion(telefono, { paso: 'agenda_confirmar', datos_confirmados: false });
-    await sendButtons(telefono, `📋 *Confirmemos tus datos:*\n\n👤 ${contacto.nombre}\n📧 ${contacto.email}\n📱 ${telefono}\n\n¿Son correctos?`, ['✅ Sí, son correctos', '✏️ Quiero cambiarlos']);
+    await sendButtons(telefono, 
+      en ? `📋 *Confirm your details:*\n\n👤 ${contacto.nombre}\n📧 ${contacto.email}\n📱 ${telefono}\n\nAre they correct?` : 
+      `📋 *Confirmemos tus datos:*\n\n👤 ${contacto.nombre}\n📧 ${contacto.email}\n📱 ${telefono}\n\n¿Son correctos?`, 
+      en ? ['✅ Yes, correct', '✏️ Change them'] : ['✅ Sí, son correctos', '✏️ Quiero cambiarlos']
+    );
     return;
   }
+  
   setSesion(telefono, { paso: 'inicio', quiere_agendar: true, datos_confirmados: true });
   await updateLeadData(telefono, { quiere_agendar: true, nivel_interes: 'hot' });
   await sendButtons(telefono,
+    en ? `✅ *All set, ${nombre}!*\n\n👤 ${contacto.nombre}\n📧 ${contacto.email}\n📱 ${telefono}\n\nTap the button to choose your date and time 👇` :
     `✅ *¡Todo listo, ${nombre}!*\n\n👤 ${contacto.nombre}\n📧 ${contacto.email}\n📱 ${telefono}\n\nToca el botón para elegir tu fecha y hora 👇`,
-    ['📅 Abrir agenda']
+    en ? ['📅 Open calendar'] : ['📅 Abrir agenda']
   );
 }
 
+// ============================================================
+// 📩 MANEJADOR PRINCIPAL DE MENSAJES (CORREGIDO)
+// ============================================================
 async function handleIncomingMessage(message, contact) {
   const telefono = contact.wa_id;
   const nombre = contact.profile?.name || '';
   const tipo = message.type;
   let texto = '';
+  
   if (tipo === 'text') texto = message.text?.body || '';
   else if (tipo === 'interactive') texto = message.interactive?.button_reply?.title || '';
+  
   if (!texto) return;
+  
   const tl = texto.toLowerCase().trim();
-  console.log(`📩 [${telefono}] ${nombre}: "${texto}"`);
+  const idioma = detectarIdioma(texto);
+  console.log(`📩 [${telefono}] ${nombre}: "${texto}" (${idioma})`);
 
   await upsertContactoBasico(telefono, nombre).catch(() => {});
   await logMensaje(telefono, nombre, 'entrada', texto);
 
-  const sesion = getSesion(telefono);
+  let sesion = getSesion(telefono);
   const contacto = await getContactoByTelefono(telefono);
-  setSesion(telefono, { mensajes: sesion.mensajes + 1 });
+  setSesion(telefono, { mensajes: (sesion.mensajes || 0) + 1 });
 
   try {
-    const nombreEsGenerico = !contacto?.nombre || contacto.nombre === '' || contacto.nombre === 'Paciente' || contacto.nombre === contact?.profile?.name;
-    const esComandoGlobal = ['menu', 'menú', 'inicio', 'hola', 'hi', 'hello', 'buenas', '0', 'cancelar', 'salir'].includes(tl);
-    const esEmail = tl.includes('@');
-
-    // SIEMPRE PEDIR NOMBRE PRIMERO
-    if (nombreEsGenerico && !esComandoGlobal && !esEmail && tl.length > 1 && tl.length < 80) {
-      const palabrasProhibidas = ['hola', 'buenas', 'info', 'ayuda', 'menu', 'menú', 'información', 'informacion', 'dolor', 'cita', 'agendar', 'precio', 'costo', 'celulas', 'células', 'madre', 'prp', 'what', 'help', 'hi', 'hello'];
-      if (!palabrasProhibidas.includes(tl)) {
-        await saveContacto({ nombre: texto, apellido: '', email: contacto?.email || '', telefono });
-        const nombreGuardado = texto.split(' ')[0];
-        await sendButtons(telefono,
-          `🌿 *Stemwell Medicina Regenerativa*\n\n¡*${nombreGuardado}*, mucho gusto! 😊\n\nCuéntame, ¿cómo puedo ayudarte hoy?`,
-          ['🦵 Tengo un dolor', '🧠 Neurología', '✨ Longevidad', '📅 Agendar cita', '💬 Hablar con alguien']
-        );
-        return;
-      }
-    }
-
+    const nombreEsGenerico = !contacto?.nombre || contacto.nombre === '' || contacto.nombre === 'Paciente' || contacto.nombre === 'Patient';
+    
+    // 🔥 COMANDOS GLOBALES (incluye "hi", "hello" en inglés)
+    const comandosGlobales = ['menu', 'menú', 'inicio', 'hola', 'hi', 'hello', 'hey', 'buenas', '0', 'cancelar', 'salir'];
+    const esComandoGlobal = comandosGlobales.includes(tl);
+    
     if (esComandoGlobal) {
       resetSesion(telefono);
-      await enviarSaludo(telefono, contacto?.nombre || nombre);
+      if (idioma === 'en') {
+        await enviarSaludoIngles(telefono, contacto?.nombre || nombre);
+      } else {
+        await enviarSaludo(telefono, contacto?.nombre || nombre);
+      }
       return;
     }
-
-    // RESPUESTAS RÁPIDAS EN FLUJOS (sin return)
-    const enFlujo = sesion.paso && (sesion.paso.startsWith('dolor_') || sesion.paso === 'dolor_pedir_nombre' || sesion.paso === 'dolor_pedir_email' || sesion.paso === 'agenda_nombre' || sesion.paso === 'agenda_email' || sesion.paso === 'agenda_confirmar');
-    if (enFlujo) {
-      const np = contacto?.nombre?.split(' ')[0] || 'amig@';
-      if (tl.includes('funcion') || tl.includes('sirve') || tl.includes('efectivo') || tl.includes('mejorar')) {
-        await sendMessage(telefono, `✨ *${np}*, la medicina regenerativa tiene +30,000 estudios. Muchos pacientes con casos como el tuyo han mejorado. Sigamos con lo que me contabas...`);
-      } else if (tl.includes('cuánto') || tl.includes('cuesta') || tl.includes('precio')) {
-        await sendMessage(telefono, `💰 *${np}*, los protocolos son personalizados. La evaluación inicial es SIN COSTO. Volviendo a tu caso...`);
-      } else if (tl.includes('segur') || tl.includes('riesgo')) {
-        await sendMessage(telefono, `✅ Sí, son seguros y ambulatorios. Continuando con lo que hablábamos...`);
-      } else if (tl.includes('célula') || tl.includes('celula') || tl.includes('madre')) {
-        await sendMessage(telefono, `🧬 Las CMM regeneran tejidos. En Stemwell usamos de cordón umbilical: seguras. Volviendo a tu caso...`);
-      }
+    
+    // 🔥 PREGUNTA "CÓMO SE APLICAN" / "HOW ARE THEY APPLIED"
+    const comoAplicanEspanol = ['cómo se aplican', 'como se aplican', 'cómo aplican', 'como aplican', 'cómo se administran'];
+    const comoAplicanIngles = ['how are they applied', 'how do you apply', 'how is it applied', 'application method'];
+    
+    if (comoAplicanEspanol.some(p => tl.includes(p))) {
+      await sendMessage(telefono, getRespuestaEspanol('comoAplican'));
+      return;
     }
-
+    
+    if (comoAplicanIngles.some(p => tl.includes(p))) {
+      await sendMessage(telefono, getRespuestaIngles('comoAplican'));
+      return;
+    }
+    
+    // 🔥 PREGUNTA "FUNCIONA" / "DOES IT WORK"
+    const funcionaEspanol = ['funciona', 'sirve', 'efectivo', 'resultados', 'me funciona', 'me sirve'];
+    const funcionaIngles = ['does it work', 'is it effective', 'does it help', 'effective?', 'work?'];
+    
+    if (funcionaEspanol.some(p => tl.includes(p))) {
+      await sendMessage(telefono, getRespuestaEspanol('funciona'));
+      return;
+    }
+    
+    if (funcionaIngles.some(p => tl.includes(p))) {
+      await sendMessage(telefono, getRespuestaIngles('funciona'));
+      return;
+    }
+    
+    // 🔥 PREGUNTA PRECIOS / COST
+    const preciosEspanol = ['costo', 'precio', 'cuánto', 'valor', 'cuanto', 'cuesta'];
+    const preciosIngles = ['cost', 'price', 'how much', 'pricing'];
+    
+    if (preciosEspanol.some(p => tl.includes(p))) {
+      await sendMessage(telefono, getRespuestaEspanol('precios'));
+      return;
+    }
+    
+    if (preciosIngles.some(p => tl.includes(p))) {
+      await sendMessage(telefono, getRespuestaIngles('precios'));
+      return;
+    }
+    
+    // ============================================================
     // FLUJOS ACTIVOS
+    // ============================================================
+    
     const esFlujoDolor = sesion.paso && (sesion.paso.startsWith('dolor_') || sesion.paso === 'dolor_pedir_nombre' || sesion.paso === 'dolor_pedir_email');
-    if (esFlujoDolor) { await flujoDolor(telefono, texto, sesion, contacto); return; }
+    if (esFlujoDolor) { 
+      await flujoDolor(telefono, texto, sesion, contacto); 
+      return; 
+    }
+    
+    // FLUJO AGENDA
     if (sesion.paso === 'agenda_nombre') {
       await saveContacto({ nombre: texto, apellido: '', email: contacto?.email || '', telefono });
       setSesion(telefono, { paso: 'agenda_email' });
-      await sendMessage(telefono, `Gracias, *${texto.split(' ')[0]}*. 🙏\n\nTu *correo electrónico*:`);
+      await sendMessage(telefono, idioma === 'en' ? `Thank you. Now your *email*:` : `Gracias. 🙏\n\nTu *correo electrónico*:`);
       return;
     }
+    
     if (sesion.paso === 'agenda_email') {
-      if (!texto.includes('@') || !texto.includes('.')) { await sendMessage(telefono, `No parece válido. Revisa.`); return; }
+      if (!texto.includes('@') || !texto.includes('.')) { 
+        await sendMessage(telefono, idioma === 'en' ? `That doesn't seem valid.` : `No parece válido. Revisa.`); 
+        return; 
+      }
       await saveContacto({ nombre: contacto?.nombre || '', apellido: '', email: texto, telefono });
       setSesion(telefono, { paso: 'agenda_confirmar', datos_confirmados: false });
-      await sendButtons(telefono, `📋 *Confirmemos tus datos:*\n\n👤 ${contacto?.nombre || texto}\n📧 ${texto}\n📱 ${telefono}\n\n¿Son correctos?`, ['✅ Sí, son correctos', '✏️ Quiero cambiarlos']);
+      await sendButtons(telefono, 
+        idioma === 'en' ? `📋 *Confirm your details:*\n\n👤 ${contacto?.nombre || texto}\n📧 ${texto}\n📱 ${telefono}\n\nAre they correct?` :
+        `📋 *Confirmemos tus datos:*\n\n👤 ${contacto?.nombre || texto}\n📧 ${texto}\n📱 ${telefono}\n\n¿Son correctos?`, 
+        idioma === 'en' ? ['✅ Yes, correct', '✏️ Change them'] : ['✅ Sí, son correctos', '✏️ Quiero cambiarlos']
+      );
       return;
     }
+    
     if (sesion.paso === 'agenda_confirmar') {
-      if (tl.includes('sí') || tl.includes('correcto') || tl.includes('✅')) {
-        // Guardar datos confirmados explícitamente
+      if (tl.includes('sí') || tl.includes('correcto') || tl.includes('✅') || tl.includes('yes')) {
         await saveContacto({
           nombre: contacto?.nombre || '',
           apellido: '',
@@ -260,50 +588,86 @@ async function handleIncomingMessage(message, contact) {
         });
         setSesion(telefono, { paso: 'inicio', quiere_agendar: true, datos_confirmados: true });
         await updateLeadData(telefono, { quiere_agendar: true, nivel_interes: 'hot' });
-        await sendButtons(telefono, `✅ *¡Todo listo, ${contacto?.nombre?.split(' ')[0]}!*\n\n👤 ${contacto?.nombre}\n📧 ${contacto?.email}\n📱 ${telefono}\n\nToca el botón para elegir tu fecha y hora 👇`, ['📅 Abrir agenda']);
+        await sendButtons(telefono, 
+          idioma === 'en' ? `✅ *All set, ${contacto?.nombre?.split(' ')[0]}!*\n\n👤 ${contacto?.nombre}\n📧 ${contacto?.email}\n📱 ${telefono}\n\nTap the button to choose your date and time 👇` :
+          `✅ *¡Todo listo, ${contacto?.nombre?.split(' ')[0]}!*\n\n👤 ${contacto?.nombre}\n📧 ${contacto?.email}\n📱 ${telefono}\n\nToca el botón para elegir tu fecha y hora 👇`, 
+          idioma === 'en' ? ['📅 Open calendar'] : ['📅 Abrir agenda']
+        );
         return;
       }
       if (tl.includes('cambiar') || tl.includes('✏️') || tl.includes('no')) {
         setSesion(telefono, { paso: 'agenda_nombre', datos_confirmados: false });
-        await sendMessage(telefono, `De acuerdo. ¿Cuál es tu *nombre completo*?`);
+        await sendMessage(telefono, idioma === 'en' ? `Okay. What is your *full name*?` : `De acuerdo. ¿Cuál es tu *nombre completo*?`);
         return;
       }
     }
-
+    
+    // ============================================================
     // BOTONES PRINCIPALES
-    if (tl.includes('abrir agenda') || tl.includes('📅')) {
-      await sendMessage(telefono, `🗓️ *Reserva tu evaluación SIN COSTO aquí:*\n\n👉 ${AGENDA_URL}\n\nSolo toma 2 minutos. Elige el día y hora que prefieras.\n\n¡Te esperamos! 💚`);
+    // ============================================================
+    
+    if (tl.includes('abrir agenda') || tl.includes('open calendar') || tl.includes('📅')) {
+      await sendMessage(telefono, 
+        idioma === 'en' 
+          ? `🗓️ *Book your FREE evaluation here:*\n\n👉 ${AGENDA_URL}\n\nIt takes only 2 minutes. Choose the day and time that works for you.\n\nSee you soon! 💚`
+          : `🗓️ *Reserva tu evaluación SIN COSTO aquí:*\n\n👉 ${AGENDA_URL}\n\nSolo toma 2 minutos. Elige el día y hora que prefieras.\n\n¡Te esperamos! 💚`
+      );
       setSesion(telefono, { paso: 'inicio' });
       return;
     }
-    if (tl.includes('dolor') || tl.includes('lesión') || tl.includes('🦵') || tl.includes('pain') || tl.includes('therapy') || tl.includes('fractura')) { await flujoDolor(telefono, texto, sesion, contacto); return; }
-    if (tl.includes('agendar mi evaluación') || tl.includes('agendar evaluación') || tl.includes('agendar') || tl.includes('cita')) { await flujoAgendar(telefono, texto, sesion, contacto); return; }
-    if (tl.includes('asesor') || tl.includes('hablar') || tl.includes('💬')) {
-      await sendButtons(telefono, `👨‍⚕️ *Con mucho gusto.*\n📞 (+57) 311 501 1920\n🕘 Lun–Vie 8am–6pm`, ['📞 Que me llamen', '✅ Ya llamo']);
+    
+    if (tl.includes('dolor') || tl.includes('lesión') || tl.includes('🦵') || tl.includes('pain') || tl.includes('i have pain')) { 
+      await flujoDolor(telefono, texto, sesion, contacto); 
+      return; 
+    }
+    
+    if (tl.includes('agendar mi evaluación') || tl.includes('agendar evaluación') || tl.includes('agendar') || tl.includes('cita') || tl.includes('book appointment')) { 
+      await flujoAgendar(telefono, texto, sesion, contacto); 
+      return; 
+    }
+    
+    if (tl.includes('asesor') || tl.includes('hablar') || tl.includes('💬') || tl.includes('speak with someone')) {
+      await sendButtons(telefono, 
+        idioma === 'en'
+          ? `👨‍⚕️ *With pleasure.*\n📞 (+57) 311 501 1920\n🕘 Mon–Fri 8am–6pm`
+          : `👨‍⚕️ *Con mucho gusto.*\n📞 (+57) 311 501 1920\n🕘 Lun–Vie 8am–6pm`,
+        idioma === 'en' ? ['📞 Call me', '✅ I\'ll call'] : ['📞 Que me llamen', '✅ Ya llamo']
+      );
       return;
     }
-
-    // IA LOCAL (Qwen)
+    
+    // ============================================================
+    // IA LOCAL
+    // ============================================================
+    
     const respuestaIA = await responderConIA(texto, contacto?.nombre || nombre, telefono);
     if (respuestaIA) {
       await sendMessage(telefono, respuestaIA);
       await logMensaje(telefono, nombre, 'salida', respuestaIA);
       await pausaNatural();
       await sendButtons(telefono,
-        '¿Te queda alguna duda? Puedes seguir escribiendo 👇\nCuando estés listo/a, agenda tu evaluación SIN COSTO. 😊',
-        ['📅 Agendar evaluación']
+        idioma === 'en'
+          ? 'Any other questions? You can keep writing 👇\nWhen you\'re ready, book your FREE evaluation. 😊'
+          : '¿Te queda alguna duda? Puedes seguir escribiendo 👇\nCuando estés listo/a, agenda tu evaluación SIN COSTO. 😊',
+        idioma === 'en' ? ['📅 Book evaluation'] : ['📅 Agendar evaluación']
       );
       return;
     }
-
+    
+    // ============================================================
     // FALLBACK
+    // ============================================================
+    
     guardarPreguntaNoRespondida(texto, telefono);
-    if (detectarIdioma(texto) === 'en') {
-      await sendMessage(telefono, `👋 Hi! I'm Sofía. How can I help you today?`);
+    if (idioma === 'en') {
+      await sendButtons(telefono, 
+        `👋 Hi! I'm Sofía. How can I help you today?`,
+        ['🦵 I have pain', '🧠 Neurology', '✨ Longevity', '📅 Book appointment', '💬 Speak with someone']
+      );
     } else {
       await enviarSaludo(telefono, contacto?.nombre || nombre);
     }
-
+    
   } catch (err) {
     console.error('❌ Error:', err);
     await sendMessage(telefono, `Perdón, tuve un tropiezo. ¿Intentas de nuevo? 🙏`);
