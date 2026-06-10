@@ -1,0 +1,54 @@
+require('dotenv').config();
+const express = require('express');
+const path = require('path');
+const fs = require('fs');
+const { Pool } = require('pg');
+const PDFDocument = require('pdfkit');
+const QRCode = require('qrcode'); // 1. <--- AGREGAR ESTA LÍNEA AL INICIO
+const { handleIncomingMessage } = require('./commands/handlers');
+const { initDB } = require('./services/postgres');
+
+// ... (El resto de tus configuraciones y middlewares se mantienen igual)
+
+// ============================================
+// RUTA: FORMULARIO DE CONSENTIMIENTO
+// ============================================
+app.get('/consentimiento', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'consentimiento', 'index.html'));
+});
+
+// ============================================
+// RUTA: GENERAR QR DEL FORMULARIO (NUEVA RUTA)
+// ============================================
+app.get('/consentimiento/qr', async (req, res) => {
+  try {
+    // Detecta automáticamente si estás en local (localhost) o en producción
+    const urlConsentimiento = process.env.APP_URL 
+      ? `${process.env.APP_URL}/consentimiento` 
+      : `${req.protocol}://${req.get('host')}/consentimiento`;
+
+    // Generar el código QR directamente en un Buffer de imagen (PNG)
+    const qrBuffer = await QRCode.toBuffer(urlConsentimiento, {
+      type: 'png',
+      width: 400,      // Tamaño de la imagen
+      margin: 2,       // Margen del borde
+      color: {
+        dark: '#00B2C2',  // Color teal oficial de Stemwell para los módulos
+        light: '#FFFFFF'  // Fondo blanco
+      }
+    });
+
+    // Configurar la respuesta como una imagen PNG
+    res.setHeader('Content-Type', 'image/png');
+    res.send(qrBuffer);
+
+  } catch (err) {
+    console.error('❌ Error al generar el QR:', err);
+    res.status(500).json({ mensaje: 'No se pudo generar el código QR' });
+  }
+});
+
+// ============================================
+// RUTA: GUARDAR CONSENTIMIENTO
+// ============================================
+// ... (Todo el resto de tu código de guardar consentimiento, webhooks y start se queda exactamente igual)

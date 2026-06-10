@@ -4,7 +4,7 @@ const {
   logMensaje, guardarMensajeRAG, getHistorialRAG,
 } = require('../services/postgres');
 const { getSesion, setSesion, resetSesion } = require('../services/sesiones');
-const { getRespuestaMedica } = require('../services/inteligencia');
+const { getInfoMedica } = require('../services/inteligencia');
 const { buscarRespuestaLocal, guardarPreguntaNoRespondida } = require('../rag/ml-engine');
 const { responderConIA } = require('../rag/ia-local');
 
@@ -251,6 +251,13 @@ async function handleIncomingMessage(message, contact) {
     }
     if (sesion.paso === 'agenda_confirmar') {
       if (tl.includes('sí') || tl.includes('correcto') || tl.includes('✅')) {
+        // Guardar datos confirmados explícitamente
+        await saveContacto({
+          nombre: contacto?.nombre || '',
+          apellido: '',
+          email: contacto?.email || '',
+          telefono
+        });
         setSesion(telefono, { paso: 'inicio', quiere_agendar: true, datos_confirmados: true });
         await updateLeadData(telefono, { quiere_agendar: true, nivel_interes: 'hot' });
         await sendButtons(telefono, `✅ *¡Todo listo, ${contacto?.nombre?.split(' ')[0]}!*\n\n👤 ${contacto?.nombre}\n📧 ${contacto?.email}\n📱 ${telefono}\n\nToca el botón para elegir tu fecha y hora 👇`, ['📅 Abrir agenda']);

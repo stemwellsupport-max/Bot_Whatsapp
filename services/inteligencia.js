@@ -1,3 +1,4 @@
+const { getRespuestaMedica } = require('../services/inteligencia');
 // ══════════════════════════════════════════════════════════
 // STEMWELL - BIBLIOTECA DE MEDICINA REGENERATIVA
 // Conocimiento médico para respuestas del bot
@@ -142,25 +143,6 @@ Las CMM tienen una capacidad única: *modular el sistema inmune sin suprimirlo*.
 Las terapias regenerativas buscan reequilibrar la respuesta inflamatoria y reducir la carga de la enfermedad.`,
 };
 
-// ══════════════════════════════════════════════════════════
-// RESPUESTAS PARA EL BOT
-// ══════════════════════════════════════════════════════════
-function getRespuestaMedica(pregunta) {
-  const tl = pregunta.toLowerCase();
-
-  if (tl.includes('célula') || tl.includes('celula') || tl.includes('mesenquimal') || tl.includes('stem cell')) return INFO_CELULAS_MADRE;
-  if (tl.includes('prp') || tl.includes('plaqueta') || tl.includes('plasma')) return INFO_PRP;
-  if (tl.includes('exosoma')) return INFO_EXOSOMAS;
-  if (tl.includes('hiperbárica') || tl.includes('hiperbarica') || tl.includes('cámara') || tl.includes('camara')) return INFO_HIPERBARICA;
-  if (tl.includes('longevidad') || tl.includes('antiaging') || tl.includes('anti aging') || tl.includes('rejuvenecer')) return INFO_LONGEVIDAD;
-  if (tl.includes('rodilla')) return INFO_CONDICIONES.rodilla;
-  if (tl.includes('cadera')) return INFO_CONDICIONES.cadera;
-  if (tl.includes('espalda') || tl.includes('columna') || tl.includes('lumbar') || tl.includes('hernia')) return INFO_CONDICIONES.espalda;
-  if (tl.includes('parkinson') || tl.includes('alzheimer') || tl.includes('esclerosis') || tl.includes('neuropatía') || tl.includes('neuropatia')) return INFO_CONDICIONES.neurologia;
-  if (tl.includes('autoinmune') || tl.includes('lupus') || tl.includes('artritis reumatoide') || tl.includes('psoriasis')) return INFO_CONDICIONES.autoinmune;
-
-  return null; // No hay info específica
-}
 
 // ══════════════════════════════════════════════════════════
 // EXPORTAR

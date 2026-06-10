@@ -67,17 +67,25 @@ async function initDB() {
 
 // ── CONTACTOS ─────────────────────────────────────────────
 async function saveContacto({ nombre, apellido, email, telefono }) {
-  await pool.query(
-    `INSERT INTO wa_contactos (telefono, nombre, apellido, email, ultimo_msg)
-     VALUES ($1, $2, $3, $4, NOW())
-     ON CONFLICT (telefono) DO UPDATE SET
-       nombre   = COALESCE(NULLIF($2,''), wa_contactos.nombre),
-       apellido = COALESCE(NULLIF($3,''), wa_contactos.apellido),
-       email    = COALESCE(NULLIF($4,''), wa_contactos.email),
-       ultimo_msg = NOW()`,
-    [telefono, nombre||'', apellido||'', email||'']
-  );
-  return (await pool.query('SELECT * FROM wa_contactos WHERE telefono=$1',[telefono])).rows[0];
+  console.log(`💾 [saveContacto] Intentando guardar: ${telefono} | ${nombre} | ${email}`);
+  try {
+    await pool.query(
+      `INSERT INTO wa_contactos (telefono, nombre, apellido, email, ultimo_msg)
+       VALUES ($1, $2, $3, $4, NOW())
+       ON CONFLICT (telefono) DO UPDATE SET
+         nombre   = COALESCE(NULLIF($2,''), wa_contactos.nombre),
+         apellido = COALESCE(NULLIF($3,''), wa_contactos.apellido),
+         email    = COALESCE(NULLIF($4,''), wa_contactos.email),
+         ultimo_msg = NOW()`,
+      [telefono, nombre||'', apellido||'', email||'']
+    );
+    const result = await pool.query('SELECT * FROM wa_contactos WHERE telefono=$1',[telefono]);
+    console.log('✅ [saveContacto] Registro actualizado:', result.rows[0]);
+    return result.rows[0];
+  } catch (err) {
+    console.error('❌ [saveContacto] Error:', err.message);
+    throw err;
+  }
 }
 
 async function getContactoByTelefono(telefono) {

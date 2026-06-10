@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Autorización de Datos · Stemwell</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --verde:       #00B2C2;
+      --verde-claro: #E6F7F9;
+      --verde-med:   #00B2C2;
+      --texto:       #1C2B26;
+      --gris:        #6B7B76;
+      --borde:       #D4E6DF;
+      --fondo:       #F7FAF8;
+      --blanco:      #FFFFFF;
+      --error:       #C0392B;
+      --exito:       #1A7A5E;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Poppins', sans-serif;
+      background: var(--fondo);
+      color: var(--texto);
+      min-height: 100vh;
+      padding: 0;
+    }
+
+    /* ── HEADER ── */
+    .header {
+      background: var(--blanco);
+      border-bottom: 1px solid var(--borde);
+      padding: 10px 24px;
+      display: flex;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .logo-mark {
+      width: 38px; height: 38px;
+      background: var(--verde);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .logo-mark svg { width: 22px; height: 22px; }
+    .header-text h1 {
+      font-size: 17px;
+      color: var(--verde);
+      line-height: 1.1;
+      font-weight: 700;
+    }
+    .header-text p {
+      font-size: 11px;
+      color: var(--gris);
+      font-weight: 400;
+      margin-top: 1px;
+    }
+
+    /* ── CONTENEDOR ── */
+    .container {
+      max-width: 560px;
+      margin: 0 auto;
+      padding: 28px 20px 60px;
+    }
+
+    /* ── INTRO CARD ── */
+    .intro-card {
+      background: var(--verde);
+      border-radius: 18px;
+      padding: 24px;
+      margin-bottom: 24px;
+      color: white;
+      position: relative;
+      overflow: hidden;
+    }
+    .intro-card::after {
+      content: '';
+      position: absolute;
+      right: -30px; top: -30px;
+      width: 140px; height: 140px;
+      background: rgba(255,255,255,0.06);
+      border-radius: 50%;
+    }
+    .intro-card h2 {
+      font-size: 22px;
+      line-height: 1.25;
+      margin-bottom: 8px;
+      font-weight: 700;
+    }
+    .intro-card p {
+      font-size: 13.5px;
+      opacity: 0.88;
+      line-height: 1.6;
+    }
+    .badge-legal {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255,255,255,0.15);
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 11px;
+      font-weight: 500;
+      margin-top: 14px;
+    }
+
+    /* ── SECCIONES ── */
+    .section {
+      background: var(--blanco);
+      border-radius: 16px;
+      padding: 22px;
+      margin-bottom: 16px;
+      border: 1px solid var(--borde);
+    }
+    .section-title {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--verde);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .section-title::before {
+      content: '';
+      width: 3px; height: 14px;
+      background: var(--verde-med);
+      border-radius: 2px;
+      display: block;
+    }
+
+    /* ── CAMPOS ── */
+    .field { margin-bottom: 16px; }
+    .field:last-child { margin-bottom: 0; }
+    label {
+      display: block;
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--gris);
+      margin-bottom: 6px;
+    }
+    label span.req { color: var(--verde-med); margin-left: 2px; }
+    input[type="text"],
+    input[type="tel"],
+    input[type="email"],
+    select {
+      width: 100%;
+      padding: 13px 15px;
+      border: 1.5px solid var(--borde);
+      border-radius: 11px;
+      font-family: 'Poppins', sans-serif;
+      font-size: 15px;
+      color: var(--texto);
+      background: var(--fondo);
+      transition: border-color 0.2s, box-shadow 0.2s;
+      -webkit-appearance: none;
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: var(--verde-med);
+      box-shadow: 0 0 0 3px rgba(0, 178, 194, 0.12);
+      background: var(--blanco);
+    }
+    input.error { border-color: var(--error); }
+    .field-error {
+      font-size: 11.5px;
+      color: var(--error);
+      margin-top: 4px;
+      display: none;
+    }
+    .field-error.show { display: block; }
+
+    /* Fila de dos columnas */
+    .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 420px) { .row-2 { grid-template-columns: 1fr; } }
+
+    /* ── POLÍTICA (scroll) ── */
+    .politica-scroll {
+      background: var(--fondo);
+      border: 1.5px solid var(--borde);
+      border-radius: 11px;
+      padding: 16px;
+      max-height: 200px;
+      overflow-y: auto;
+      font-size: 12.5px;
+      line-height: 1.7;
+      color: var(--gris);
+      margin-bottom: 14px;
+    }
+    .politica-scroll::-webkit-scrollbar { width: 4px; }
+    .politica-scroll::-webkit-scrollbar-thumb { background: var(--borde); border-radius: 4px; }
+    .politica-scroll h4 {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--texto);
+      margin: 12px 0 4px;
+    }
+    .politica-scroll h4:first-child { margin-top: 0; }
+
+    /* ── CHECKBOX ── */
+    .check-wrap {
+      display: flex;
+      align-items: flex-start;
+      gap: 11px;
+      padding: 14px;
+      border-radius: 11px;
+      border: 1.5px solid var(--borde);
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .check-wrap:hover { border-color: var(--verde-med); background: var(--verde-claro); }
+    .check-wrap input[type="checkbox"] { display: none; }
+    .check-box {
+      width: 22px; height: 22px; flex-shrink: 0;
+      border: 2px solid var(--borde);
+      border-radius: 6px;
+      background: var(--blanco);
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s;
+      margin-top: 1px;
+    }
+    .check-wrap.checked .check-box {
+      background: var(--verde);
+      border-color: var(--verde);
+    }
+    .check-wrap.checked .check-box::after {
+      content: '';
+      width: 6px; height: 10px;
+      border: 2px solid white;
+      border-top: none; border-left: none;
+      transform: rotate(45deg) translateY(-1px);
+      display: block;
+    }
+    .check-label {
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--texto);
+    }
+    .check-label strong { color: var(--verde); }
+
+    /* ── CANVAS DE FIRMA ── */
+    .firma-wrap {
+      position: relative;
+      border: 2px dashed var(--borde);
+      border-radius: 14px;
+      background: var(--fondo);
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+    .firma-wrap.activo { border-color: var(--verde-med); border-style: solid; }
+    .firma-hint {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      transition: opacity 0.3s;
+      gap: 6px;
+    }
+    .firma-hint svg { opacity: 0.25; }
+    .firma-hint p {
+      font-size: 12.5px;
+      color: var(--gris);
+      opacity: 0.7;
+      font-weight: 400;
+    }
+    canvas#firma-canvas {
+      display: block;
+      width: 100%;
+      height: 160px;
+      touch-action: none;
+      cursor: crosshair;
+    }
+    .firma-actions {
+      display: flex;
+      justify-content: flex-end;
+      padding: 8px 12px;
+      border-top: 1px solid var(--borde);
+      background: var(--blanco);
+    }
+    .btn-limpiar {
+      font-size: 12px;
+      color: var(--gris);
+      background: none;
+      border: 1px solid var(--borde);
+      border-radius: 7px;
+      padding: 5px 12px;
+      cursor: pointer;
+      font-family: 'Poppins', sans-serif;
+      transition: all 0.2s;
+    }
+    .btn-limpiar:hover { border-color: var(--error); color: var(--error); }
+    .firma-error {
+      font-size: 11.5px;
+      color: var(--error);
+      margin-top: 6px;
+      display: none;
+    }
+    .firma-error.show { display: block; }
+
+    /* ── BOTÓN ENVIAR ── */
+    .btn-enviar {
+      width: 100%;
+      padding: 17px;
+      background: var(--verde);
+      color: white;
+      border: none;
+      border-radius: 14px;
+      font-family: 'Poppins', sans-serif;
+      font-size: 18px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .btn-enviar:hover:not(:disabled) {
+      background: #0093a0;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(0, 178, 194, 0.3);
+    }
+    .btn-enviar:disabled { opacity: 0.6; cursor: not-allowed; }
+    .spinner {
+      width: 20px; height: 20px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: none;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .nota-footer {
+      text-align: center;
+      font-size: 11.5px;
+      color: var(--gris);
+      margin-top: 14px;
+      line-height: 1.6;
+    }
+    .nota-footer a { color: var(--verde); text-decoration: none; }
+
+    /* ── PANTALLA DE ÉXITO ── */
+    #pantalla-exito {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: 48px 24px;
+    }
+    .exito-icono {
+      width: 80px; height: 80px;
+      background: var(--verde-claro);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 22px;
+    }
+    .exito-icono svg { width: 40px; height: 40px; }
+    #pantalla-exito h2 {
+      font-size: 26px;
+      color: var(--verde);
+      margin-bottom: 10px;
+      font-weight: 700;
+    }
+    #pantalla-exito p {
+      font-size: 14.5px;
+      color: var(--gris);
+      line-height: 1.65;
+      max-width: 320px;
+    }
+    .folio-box {
+      background: var(--verde-claro);
+      border: 1px solid var(--borde);
+      border-radius: 12px;
+      padding: 14px 24px;
+      margin: 20px 0;
+      text-align: center;
+    }
+    .folio-box p { font-size: 12px; color: var(--gris); margin-bottom: 4px; }
+    .folio-box strong { font-size: 22px; color: var(--verde); letter-spacing: 0.06em; font-weight: 600; }
+  </style>
+</head>
+<body>
+
+<header class="header">
+  <img src="/images/STEMWELL_LOGO_.png" alt="Stemwell" style="height:54px; width:auto;" />
+</header>
+
+<div class="container">
+
+  <div id="pantalla-form">
+
+    <div class="intro-card">
+      <h2>Autorización de<br>Tratamiento de Datos</h2>
+      <p>Antes de tu cita, necesitamos tu autorización para manejar tu información con responsabilidad y confidencialidad.</p>
+      <div class="badge-legal">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Ley 1581 de 2012 · Colombia
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Datos del Titular</div>
+
+      <div class="row-2">
+        <div class="field">
+          <label>Nombre(s) <span class="req">*</span></label>
+          <input type="text" id="nombres" placeholder="Juan Carlos" autocomplete="given-name" />
+          <div class="field-error" id="err-nombres">Ingresa tu nombre</div>
+        </div>
+        <div class="field">
+          <label>Apellido(s) <span class="req">*</span></label>
+          <input type="text" id="apellidos" placeholder="Rodríguez" autocomplete="family-name" />
+          <div class="field-error" id="err-apellidos">Ingresa tu apellido</div>
+        </div>
+      </div>
+
+      <div class="row-2">
+        <div class="field">
+          <label>Tipo de documento <span class="req">*</span></label>
+          <select id="tipo-doc">
+            <option value="">Selecciona…</option>
+            <option value="CC">Cédula de ciudadanía</option>
+            <option value="CE">Cédula de extranjería</option>
+            <option value="PA">Pasaporte</option>
+            <option value="TI">Tarjeta de identidad</option>
+            <option value="PP">PEP</option>
+          </select>
+          <div class="field-error" id="err-tipo-doc">Selecciona el tipo</div>
+        </div>
+        <div class="field">
+          <label>Número de documento <span class="req">*</span></label>
+          <input type="tel" id="cedula" placeholder="1234567890" inputmode="numeric" />
+          <div class="field-error" id="err-cedula">Ingresa tu documento</div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Teléfono / WhatsApp <span class="req">*</span></label>
+        <input type="tel" id="telefono" placeholder="+57 300 000 0000" inputmode="tel" autocomplete="tel" />
+        <div class="field-error" id="err-telefono">Ingresa tu teléfono</div>
+      </div>
+
+      <div class="field">
+        <label>Correo electrónico <span class="req">*</span></label>
+        <input type="email" id="email" placeholder="tucorreo@ejemplo.com" inputmode="email" autocomplete="email" />
+        <div class="field-error" id="err-email">Ingresa un correo válido</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Política de Tratamiento</div>
+
+      <div class="politica-scroll">
+        <h4>¿Quién es responsable?</h4>
+        STEMWELL, NIT 901.970.773-4, Carrera 13 No. 118-08, Bogotá D.C. Contacto: info@stemwell.co · +57 310 406 8755
+
+        <h4>¿Para qué usamos tus datos?</h4>
+        Prestación de servicios de salud, valoraciones médicas, diagnósticos, tratamientos, seguimientos clínicos, historia clínica, gestión de citas, facturación y reportes ante entidades del Sistema de Seguridad Social.
+
+        <h4>Datos sensibles de salud</h4>
+        La información clínica se maneja bajo estrictos estándares de confidencialidad y acceso restringido. Solo personal asistencial autorizado puede acceder a ella.
+
+        <h4>¿Con quién compartimos?</h4>
+        Con EPS, IPS aliadas, laboratorios, aseguradoras, autoridades regulatorias y proveedores tecnológicos, exigiendo siempre medidas de seguridad adecuadas.
+
+        <h4>Tus derechos</h4>
+        Conocer, actualizar, rectificar y suprimir tus datos. Revocar la autorización cuando sea procedente. Presentar quejas ante la Superintendencia de Industria y Comercio.
+
+        <h4>Vigencia</h4>
+        Esta política rige desde su publicación y podrá modificarse con previo aviso por los canales oficiales de Stemwell.
+      </div>
+
+      <label class="check-wrap" id="check-wrap-acepto">
+        <input type="checkbox" id="acepto-politica" />
+        <div class="check-box"></div>
+        <span class="check-label">
+          He leído y acepto la <strong>Política de Tratamiento de Datos Personales</strong> de Stemwell, conforme a la Ley 1581 de 2012.
+        </span>
+      </label>
+      <div class="field-error" id="err-acepto">Debes aceptar la política para continuar</div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Firma del Titular</div>
+      <p style="font-size:13px; color:var(--gris); margin-bottom:14px; line-height:1.55;">
+        Firma con tu dedo o mouse en el espacio de abajo. Esta firma quedará registrada junto a tu autorización.
+      </p>
+      <div class="firma-wrap" id="firma-wrap">
+        <div class="firma-hint" id="firma-hint">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+          </svg>
+          <p>Firma aquí</p>
+        </div>
+        <canvas id="firma-canvas" width="800" height="320"></canvas>
+        <div class="firma-actions">
+          <button class="btn-limpiar" id="btn-limpiar-firma" type="button">✕ Limpiar firma</button>
+        </div>
+      </div>
+      <div class="firma-error" id="err-firma">Por favor coloca tu firma para continuar</div>
+    </div>
+
+    <button class="btn-enviar" id="btn-enviar" type="button">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        <polyline points="9 12 11 14 15 10"/>
+      </svg>
+      <span id="btn-texto">Confirmar y firmar</span>
+      <div class="spinner" id="spinner"></div>
+    </button>
+
+    <p class="nota-footer">
+      Al confirmar, tu firma digital queda registrada con fecha, hora y<br>número de documento.
+      Ley 527 de 1999 · Colombia.
+    </p>
+
+  </div><div id="pantalla-exito">
+    <div class="exito-icono">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#1A7A5E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        <polyline points="9 12 11 14 15 10"/>
+      </svg>
+    </div>
+    <h2>¡Autorización registrada!</h2>
+    <p>Tu firma y consentimiento quedaron guardados de forma segura. Puedes cerrar esta ventana.</p>
+    <div class="folio-box">
+      <p>Número de folio</p>
+      <strong id="folio-numero">—</strong>
+    </div>
+    <p style="font-size:12px; color:var(--gris);">
+      Recibirás confirmación al correo registrado.<br>
+      ¿Preguntas? <a href="mailto:info@stemwell.co">info@stemwell.co</a>
+    </p>
+  </div>
+
+</div><script>
+// ── CANVAS DE FIRMA ─────────────────────────────────────────────────────
+const canvas  = document.getElementById('firma-canvas');
+const ctx     = canvas.getContext('2d');
+const hint    = document.getElementById('firma-hint');
+const wrap    = document.getElementById('firma-wrap');
+let pintando  = false;
+let firmaTocada = false;
+
+function escalarCanvas() {
+  const rect = canvas.getBoundingClientRect();
+  canvas.width  = rect.width  * window.devicePixelRatio;
+  canvas.height = rect.height * window.devicePixelRatio;
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+  ctx.lineWidth   = 2.2;
+  ctx.lineCap     = 'round';
+  ctx.lineJoin    = 'round';
+  ctx.strokeStyle = '#1C2B26';
+}
+window.addEventListener('resize', escalarCanvas);
+escalarCanvas();
+
+function posicion(e) {
+  const r = canvas.getBoundingClientRect();
+  if (e.touches) {
+    return { x: e.touches[0].clientX - r.left, y: e.touches[0].clientY - r.top };
+  }
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+
+function iniciar(e) {
+  e.preventDefault();
+  pintando = true;
+  const p = posicion(e);
+  ctx.beginPath();
+  ctx.moveTo(p.x, p.y);
+  hint.style.opacity = '0';
+  wrap.classList.add('activo');
+  firmaTocada = true;
+}
+function dibujar(e) {
+  e.preventDefault();
+  if (!pintando) return;
+  const p = posicion(e);
+  ctx.lineTo(p.x, p.y);
+  ctx.stroke();
+}
+function detener(e) { pintando = false; }
+
+canvas.addEventListener('mousedown',  iniciar,  { passive: false });
+canvas.addEventListener('mousemove',  dibujar,  { passive: false });
+canvas.addEventListener('mouseup',    detener);
+canvas.addEventListener('mouseleave', detener);
+canvas.addEventListener('touchstart', iniciar,  { passive: false });
+canvas.addEventListener('touchmove',  dibujar,  { passive: false });
+canvas.addEventListener('touchend',   detener);
+
+document.getElementById('btn-limpiar-firma').addEventListener('click', () => {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  hint.style.opacity = '1';
+  wrap.classList.remove('activo');
+  firmaTocada = false;
+});
+
+// ── CHECKBOX ─────────────────────────────────────────────────────────────
+const checkWrap = document.getElementById('check-wrap-acepto');
+const checkInput = document.getElementById('acepto-politica');
+checkWrap.addEventListener('click', () => {
+  checkInput.checked = !checkInput.checked;
+  checkWrap.classList.toggle('checked', checkInput.checked);
+});
+
+// ── VALIDACIÓN ───────────────────────────────────────────────────────────
+function mostrarError(id, show) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.toggle('show', show);
+}
+function marcarCampo(id, error) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.toggle('error', error);
+}
+
+function validar() {
+  let ok = true;
+
+  const nombres   = document.getElementById('nombres').value.trim();
+  const apellidos = document.getElementById('apellidos').value.trim();
+  const tipoDoc   = document.getElementById('tipo-doc').value;
+  const cedula    = document.getElementById('cedula').value.trim();
+  const telefono  = document.getElementById('telefono').value.trim();
+  const email     = document.getElementById('email').value.trim();
+
+  if (!nombres)   { marcarCampo('nombres', true);   mostrarError('err-nombres', true);   ok = false; } else { marcarCampo('nombres', false);   mostrarError('err-nombres', false); }
+  if (!apellidos) { marcarCampo('apellidos', true);  mostrarError('err-apellidos', true); ok = false; } else { marcarCampo('apellidos', false);  mostrarError('err-apellidos', false); }
+  if (!tipoDoc)   { marcarCampo('tipo-doc', true);   mostrarError('err-tipo-doc', true);  ok = false; } else { marcarCampo('tipo-doc', false);   mostrarError('err-tipo-doc', false); }
+  if (cedula.length < 5) { marcarCampo('cedula', true); mostrarError('err-cedula', true); ok = false; } else { marcarCampo('cedula', false); mostrarError('err-cedula', false); }
+  if (telefono.replace(/\D/g,'').length < 7) { marcarCampo('telefono', true); mostrarError('err-telefono', true); ok = false; } else { marcarCampo('telefono', false); mostrarError('err-telefono', false); }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) { marcarCampo('email', true); mostrarError('err-email', true); ok = false; } else { marcarCampo('email', false); mostrarError('err-email', false); }
+
+  if (!checkInput.checked) { mostrarError('err-acepto', true); ok = false; } else { mostrarError('err-acepto', false); }
+  if (!firmaTocada) { document.getElementById('err-firma').classList.add('show'); ok = false; }
+  else              { document.getElementById('err-firma').classList.remove('show'); }
+
+  return ok;
+}
+
+// ── ENVÍO ─────────────────────────────────────────────────────────────────
+document.getElementById('btn-enviar').addEventListener('click', async () => {
+  if (!validar()) {
+    // Scroll al primer error
+    const primerError = document.querySelector('.error, .field-error.show, .firma-error.show');
+    if (primerError) primerError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+
+  const btn     = document.getElementById('btn-enviar');
+  const texto   = document.getElementById('btn-texto');
+  const spinner = document.getElementById('spinner');
+  btn.disabled  = true;
+  texto.textContent = 'Guardando…';
+  spinner.style.display = 'block';
+
+  try {
+    const firmaBase64 = canvas.toDataURL('image/png');
+    const payload = {
+      nombres:    document.getElementById('nombres').value.trim(),
+      apellidos:  document.getElementById('apellidos').value.trim(),
+      tipo_doc:   document.getElementById('tipo-doc').value,
+      cedula:     document.getElementById('cedula').value.trim(),
+      telefono:   document.getElementById('telefono').value.trim(),
+      email:      document.getElementById('email').value.trim().toLowerCase(),
+      firma_img:  firmaBase64,
+      acepto_politica: true,
+      user_agent: navigator.userAgent,
+    };
+
+    const res = await fetch('/consentimiento/guardar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json();
+
+    if (res.ok && data.folio) {
+      document.getElementById('folio-numero').textContent = data.folio;
+      document.getElementById('pantalla-form').style.display = 'none';
+      const exito = document.getElementById('pantalla-exito');
+      exito.style.display = 'flex';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      throw new Error(data.mensaje || 'Error del servidor');
+    }
+
+  } catch (err) {
+    console.error(err);
+    alert('Hubo un problema al guardar. Verifica tu conexión e intenta de nuevo.\n\n' + err.message);
+    btn.disabled = false;
+    texto.textContent = 'Confirmar y firmar';
+    spinner.style.display = 'none';
+  }
+});
+</script>
+</body>
+</html>
