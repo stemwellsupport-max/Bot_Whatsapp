@@ -1,6 +1,6 @@
 // ============================================================
-// commands/handlers.js - VERSIÓN SIMPLIFICADA
-// SOLO IA - SIN FLUJOS, SIN BOTONES, SIN MENÚS
+// commands/handlers.js - VERSIÓN MEJORADA
+// DERIVA A CONSULTA GRATUITA - SIN AFIRMAR RESULTADOS
 // ============================================================
 
 const { sendMessage } = require('../services/whatsapp');
@@ -37,7 +37,7 @@ async function handleIncomingMessage(message, contact) {
   setSesion(telefono, { mensajes: (sesion.mensajes || 0) + 1, idioma: idioma });
 
   try {
-    const respuestaIA = await responderConIA(texto, nombre, telefono, idioma);
+    const respuestaIA = await responderConIA(texto, nombre, telefono, idioma, sendMessage);
     
     if (respuestaIA) {
       await pausaNatural();

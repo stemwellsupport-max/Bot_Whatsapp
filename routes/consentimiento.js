@@ -1,211 +1,153 @@
-const express = require('express');
-const router = express.Router();
-const path = require('path');
-const fs = require('fs');
-const { Pool } = require('pg');
-const PDFDocument = require('pdfkit');
+// ============================================================
+// services/conocimiento.js
+// BASE DE CONOCIMIENTO OFICIAL DE STEMWELL
+// SOLO DATOS VERIFICADOS - NADA ESPECULATIVO
+// ============================================================
 
-// Configuración de PostgreSQL
-const pool = new Pool({
-  host: process.env.PG_HOST || 'localhost',
-  port: parseInt(process.env.PG_PORT || '5432'),
-  database: process.env.PG_DATABASE || 'stemwell',
-  user: process.env.PG_USER || 'crm_user',
-  password: process.env.PG_PASSWORD || 'crm2024',
-});
+const CONOCIMIENTO = {
+  empresa: {
+    nombre: "STEMWELL",
+    nombre_completo: "STEMWELL Medicina Regenerativa",
+    slogan: "Innovación que transforma vidas",
+    ubicacion: "Bogotá D.C., Colombia",
+    direccion: "Calle 127 #7-19, Consultorio 401, Bogotá",
+    telefono: "+57 310 406 8755",
+    email: "info@stemwell.co",
+    sitio_web: "https://stemwell.co",
+    horarios: "Lunes a Viernes 8:00 AM - 6:00 PM, Sábados 9:00 AM - 1:00 PM"
+  },
 
-// Directorio para PDFs
-const PDF_DIR = path.join(__dirname, '..', 'pdfs');
-if (!fs.existsSync(PDF_DIR)) fs.mkdirSync(PDF_DIR, { recursive: true });
-
-// Crear tabla si no existe
-async function initTabla() {
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS consentimientos (
-        id               SERIAL PRIMARY KEY,
-        folio            VARCHAR(20) UNIQUE NOT NULL,
-        nombres          TEXT NOT NULL,
-        apellidos        TEXT NOT NULL,
-        tipo_documento   VARCHAR(60) NOT NULL,
-        numero_documento VARCHAR(30) NOT NULL,
-        telefono         VARCHAR(30),
-        email            VARCHAR(120),
-        acepto_politica  BOOLEAN DEFAULT TRUE,
-        firma_img        TEXT,
-        pdf_path         TEXT,
-        ip_address       VARCHAR(60),
-        user_agent       TEXT,
-        fecha_registro   TIMESTAMPTZ DEFAULT NOW()
-      );
-    `);
-    console.log('✅ Tabla consentimientos lista');
-  } catch (e) {
-    console.error('⚠️ Error creando tabla:', e.message);
-  }
-}
-initTabla();
-
-// Generar folio único
-function generarFolio() {
-  const ts = Date.now().toString(36).toUpperCase();
-  const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
-  return `STW-${ts}-${rand}`;
-}
-
-// Generar PDF
-function generarPDF(datos, folio) {
-  return new Promise((resolve, reject) => {
-    const filename = `consentimiento_${folio}.pdf`;
-    const filepath = path.join(PDF_DIR, filename);
-    const doc = new PDFDocument({ margin: 60, size: 'A4' });
-    const stream = fs.createWriteStream(filepath);
-
-    doc.pipe(stream);
-
-    const VERDE = '#1A7A5E';
-    const TEXTO = '#1C2B26';
-    const BORDE = '#D4E6DF';
-
-    // Encabezado
-    doc.rect(0, 0, 595, 80).fill(VERDE);
-    doc.font('Helvetica-Bold').fontSize(20).fillColor('#FFFFFF').text('STEMWELL', 60, 22);
-    doc.font('Helvetica').fontSize(10).fillColor('#FFFFFF').text('Medicina Regenerativa · Bogotá D.C.', 60, 47);
-    doc.font('Helvetica').fontSize(9).fillColor('#FFFFFF').text('info@stemwell.co · +57 310 406 8755', 60, 62);
-    doc.font('Helvetica-Bold').fontSize(12).fillColor('#FFFFFF').text(folio, 430, 37, { align: 'right', width: 105 });
-
-    let y = 100;
-
-    // Título
-    doc.font('Helvetica-Bold').fontSize(14).fillColor(VERDE)
-       .text('AUTORIZACIÓN DE TRATAMIENTO DE DATOS PERSONALES', 60, y, { width: 475, align: 'center' });
-    y += 40;
-
-    // Declaración
-    const fechaFormateada = new Date().toLocaleDateString('es-CO', {
-      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-      hour: '2-digit', minute: '2-digit'
-    });
-
-    const declaracion = `Yo, ${datos.nombres} ${datos.apellidos}, identificado(a) con ${datos.tipo_documento} No. ${datos.numero_documento}, manifiesto que he leído la Política de Tratamiento de Datos Personales de STEMWELL y autorizo de manera PREVIA, EXPRESA, INFORMADA E INEQUÍVOCA a STEMWELL para el tratamiento de mis datos personales conforme a las finalidades allí descritas, en cumplimiento de la Ley 1581 de 2012.
-
-Fecha y hora: ${fechaFormateada}`;
-
-    doc.rect(55, y - 6, 485, 85).fill('#E8F5F0').stroke(BORDE);
-    doc.font('Helvetica').fontSize(9.5).fillColor(TEXTO).text(declaracion, 65, y, { width: 465, lineGap: 3 });
-    y += 95;
-
-    // Firma
-    if (datos.firma_img && datos.firma_img.startsWith('data:image/png;base64,')) {
-      const base64Data = datos.firma_img.replace('data:image/png;base64,', '');
-      const firmaBuffer = Buffer.from(base64Data, 'base64');
-      doc.rect(55, y - 4, 260, 90).fill('#FAFAFA').stroke(BORDE);
-      doc.image(firmaBuffer, 60, y, { width: 250, height: 80, fit: [250, 80] });
+  especialidades: {
+    medicina_regenerativa: {
+      definicion: "La medicina regenerativa es una rama médica que utiliza los propios mecanismos de reparación del cuerpo para tratar tejidos dañados, reducir inflamación y promover la regeneración celular natural.",
+      enfoque: "En STEMWELL nos enfocamos en terapias biológicas avanzadas, basadas en evidencia científica, sin prometer curas milagrosas sino apoyando los procesos naturales de sanación del organismo.",
+      pilares: [
+        "Células madre mesenquimales",
+        "Exosomas",
+        "Plasma Rico en Plaquetas (PRP)",
+        "Factores de crecimiento",
+        "Terapias celulares personalizadas"
+      ]
     }
+  },
 
-    doc.end();
-    stream.on('finish', () => resolve({ filepath, filename }));
-    stream.on('error', reject);
+  procedimientos: {
+    descripcion_general: "Nuestros procedimientos son mínimamente invasivos, realizados por médicos especialistas con amplia experiencia. Cada protocolo se diseña según las necesidades específicas de cada paciente, previa evaluación médica exhaustiva.",
+    
+    // IMPORTANTE: NO describimos resultados garantizados
+    // Cada procedimiento requiere valoración médica previa
+    tipos: [
+      {
+        nombre: "Terapia con Células Madre",
+        aplicaciones_generales: "Se investiga su uso en regeneración de tejidos, modulación del sistema inmune y reducción de inflamación crónica.",
+        nota_importante: "La idoneidad de este tratamiento debe ser determinada por un médico especialista tras evaluación individual."
+      },
+      {
+        nombre: "Terapia con Exosomas",
+        aplicaciones_generales: "Los exosomas son vesículas extracelulares que facilitan la comunicación celular y pueden apoyar procesos regenerativos naturales.",
+        nota_importante: "Su aplicación específica depende del diagnóstico médico. No todos los pacientes son candidatos."
+      },
+      {
+        nombre: "Plasma Rico en Plaquetas (PRP)",
+        aplicaciones_generales: "Se utiliza para estimular la reparación de tejidos mediante la concentración de factores de crecimiento del propio paciente.",
+        nota_importante: "La efectividad varía según la condición del paciente y debe ser evaluada por un especialista."
+      }
+    ]
+  },
+
+  consulta_gratuita: {
+    descripcion: "STEMWELL ofrece una primera consulta de valoración SIN COSTO para entender tu caso, resolver tus dudas y determinar si la medicina regenerativa es una opción adecuada para ti.",
+    modalidades: [
+      "Presencial: En nuestra clínica en Bogotá (Calle 127 #7-19, Consultorio 401)",
+      "Virtual: Por videollamada desde cualquier lugar de Colombia o el mundo",
+      "Telefónica: Llamada directa con uno de nuestros especialistas"
+    ],
+    que_incluye: [
+      "Evaluación inicial de tu caso por un médico especialista",
+      "Explicación detallada de las opciones de tratamiento (si aplican)",
+      "Resolución de todas tus dudas sin compromiso",
+      "Recomendaciones personalizadas basadas en tu historia clínica"
+    ],
+    como_agendar: "Puedes agendar tu consulta gratuita respondiendo a este mensaje con tu disponibilidad de horario, o llamándonos directamente al +57 310 406 8755. Te confirmaremos en menos de 24 horas."
+  },
+
+  politicas: {
+    proteccion_datos: "STEMWELL cumple con la Ley 1581 de 2012 de Protección de Datos Personales. Toda la información de nuestros pacientes es tratada con estricta confidencialidad y solo se utiliza para los fines autorizados mediante consentimiento informado.",
+    consentimiento: "Todo paciente debe firmar un consentimiento informado antes de cualquier procedimiento, donde se explican detalladamente los beneficios, riesgos y alternativas."
+  },
+
+  precios: {
+    politica: "Los costos de nuestros tratamientos se discuten durante la consulta de valoración, ya que cada protocolo es personalizado y depende de las necesidades específicas del paciente. La consulta inicial de valoración es completamente GRATIS."
+  },
+
+  faq: [
+    {
+      pregunta: "¿Los tratamientos son seguros?",
+      respuesta: "Todos nuestros procedimientos son realizados por médicos especialistas certificados, siguiendo estrictos protocolos de bioseguridad y estándares internacionales. Sin embargo, cada tratamiento debe ser evaluado individualmente para determinar su idoneidad y seguridad en tu caso particular. Agenda tu consulta gratuita para una evaluación personalizada."
+    },
+    {
+      pregunta: "¿Tienen efectos secundarios?",
+      respuesta: "Como todo procedimiento médico, pueden existir riesgos que deben ser discutidos con tu médico tratante. En tu consulta de valoración gratuita, el especialista te explicará detalladamente los posibles efectos según tu condición específica."
+    },
+    {
+      pregunta: "¿Cuánto cuesta el tratamiento?",
+      respuesta: "Los costos varían según el protocolo personalizado que se diseñe para ti. La primera consulta de valoración es completamente GRATIS y en ella recibirás información detallada sobre las opciones y costos específicos para tu caso."
+    },
+    {
+      pregunta: "¿Aceptan seguros médicos?",
+      respuesta: "Actualmente trabajamos con reembolso directo al paciente. Te entregamos toda la documentación necesaria para que puedas gestionar el reembolso con tu aseguradora. Podemos discutir esto a detalle en tu consulta gratuita."
+    }
+  ]
+};
+
+// ============================================================
+// FUNCIÓN PARA OBTENER CONOCIMIENTO RELEVANTE
+// ============================================================
+function obtenerContexto(pregunta = '') {
+  const preguntaLower = pregunta.toLowerCase();
+  
+  let contexto = `
+INFORMACIÓN OFICIAL DE STEMWELL:
+
+🏥 EMPRESA:
+- ${CONOCIMIENTO.empresa.nombre_completo}
+- Dirección: ${CONOCIMIENTO.empresa.direccion}
+- Teléfono: ${CONOCIMIENTO.empresa.telefono}
+- Email: ${CONOCIMIENTO.empresa.email}
+- Horarios: ${CONOCIMIENTO.empresa.horarios}
+
+🔬 ESPECIALIDAD:
+${CONOCIMIENTO.especialidades.medicina_regenerativa.definicion}
+
+💉 PROCEDIMIENTOS DISPONIBLES:
+`;
+
+  CONOCIMIENTO.procedimientos.tipos.forEach(p => {
+    contexto += `- ${p.nombre}: ${p.aplicaciones_generales}\n`;
   });
+
+  contexto += `
+🆓 CONSULTA GRATUITA:
+${CONOCIMIENTO.consulta_gratuita.descripcion}
+
+Modalidades:
+${CONOCIMIENTO.consulta_gratuita.modalidades.map(m => `- ${m}`).join('\n')}
+
+Para agendar: ${CONOCIMIENTO.consulta_gratuita.como_agendar}
+
+💰 PRECIOS:
+${CONOCIMIENTO.precios.politica}
+
+📋 POLÍTICAS:
+${CONOCIMIENTO.politicas.proteccion_datos}
+
+⚠️ REGLA PRINCIPAL: NUNCA afirmar que un tratamiento "funciona" o "cura" una condición específica. SIEMPRE derivar a consulta gratuita con un especialista para evaluación personalizada.
+`;
+
+  return contexto;
 }
 
-// ============================================
-// POST /firmar
-// ============================================
-router.post('/firmar', async (req, res) => {
-  try {
-    const {
-      nombres, apellidos, tipo_documento, numero_documento,
-      telefono, email, firma_img, acepto_politica, user_agent
-    } = req.body;
-
-    // Validaciones
-    if (!nombres || !apellidos || !tipo_documento || !numero_documento) {
-      return res.status(400).json({ error: 'Faltan campos obligatorios' });
-    }
-    if (!firma_img) {
-      return res.status(400).json({ error: 'Firma requerida' });
-    }
-
-    const ip = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim();
-    const folio = generarFolio();
-
-    // Generar PDF
-    let pdfInfo = null;
-    try {
-      pdfInfo = await generarPDF({ ...req.body, folio }, folio);
-    } catch (pdfErr) {
-      console.error('Error generando PDF:', pdfErr.message);
-    }
-
-    // Guardar en BD
-    await pool.query(`
-      INSERT INTO consentimientos
-        (folio, nombres, apellidos, tipo_documento, numero_documento,
-         telefono, email, acepto_politica, firma_img, pdf_path, ip_address, user_agent)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-    `, [
-      folio, nombres, apellidos, tipo_documento, numero_documento,
-      telefono || null, email || null, true,
-      firma_img, pdfInfo?.filename || null, ip, user_agent || null
-    ]);
-
-    console.log(`✅ Consentimiento registrado: ${folio} - ${nombres} ${apellidos}`);
-
-    res.json({
-      ok: true,
-      folio,
-      mensaje: 'Autorización registrada exitosamente',
-      pdf_url: pdfInfo ? `/pdf/${folio}` : null,
-    });
-
-  } catch (err) {
-    console.error('Error en /firmar:', err);
-    res.status(500).json({ error: 'Error interno', mensaje: err.message });
-  }
-});
-
-// ============================================
-// GET /pdf/:folio
-// ============================================
-router.get('/pdf/:folio', async (req, res) => {
-  try {
-    const { folio } = req.params;
-
-    const result = await pool.query(
-      'SELECT pdf_path, nombres, apellidos FROM consentimientos WHERE folio = $1',
-      [folio]
-    );
-    if (!result.rows.length) {
-      return res.status(404).send('Folio no encontrado');
-    }
-
-    const { pdf_path, nombres, apellidos } = result.rows[0];
-    if (!pdf_path) {
-      return res.status(404).send('PDF no disponible');
-    }
-
-    const filepath = path.join(PDF_DIR, pdf_path);
-    if (!fs.existsSync(filepath)) {
-      return res.status(404).send('Archivo no encontrado');
-    }
-
-    const downloadName = `Stemwell_Consentimiento_${nombres}_${apellidos}_${folio}.pdf`.replace(/\s+/g, '_');
-    res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"`);
-    res.setHeader('Content-Type', 'application/pdf');
-    fs.createReadStream(filepath).pipe(res);
-
-  } catch (err) {
-    console.error('Error descargando PDF:', err);
-    res.status(500).send('Error al descargar');
-  }
-});
-
-// ============================================
-// GET /consentimiento - servir el HTML
-// ============================================
-router.get('/consentimiento', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'public', 'consentimiento.html'));
-});
-
-module.exports = router;
+module.exports = {
+  CONOCIMIENTO,
+  obtenerContexto
+};

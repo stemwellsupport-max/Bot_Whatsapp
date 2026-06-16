@@ -1,362 +1,176 @@
-// ============================================================
-// services/ia-local.js - SISTEMA HÍBRIDO CON APRENDIZAJE
-// Respuestas rápidas + LM Studio multilingüe + Memoria
-// ============================================================
-
+// services/ia-local.js - VERSIÓN FINAL CON ENCUESTA Y LISTA DE SERVICIOS
 const { buscarEnConocimiento, guardarConocimiento } = require('./postgres');
 
 const AGENDA_URL = process.env.AGENDA_URL || 'https://ff.healthatom.io/ETDnHN';
 const LM_STUDIO_URL = 'http://localhost:1234/v1/chat/completions';
-const LM_MODEL = process.env.LM_MODEL || 'qwen2.5-3b-instruct'; // ← CAMBIADO
+const LM_MODEL = process.env.LM_MODEL || 'qwen2.5-3b-instruct';
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 💾 MEMORIA DE IDIOMA POR TELÉFONO
-// ═══════════════════════════════════════════════════════════════════════════
 const idiomasPorTelefono = new Map();
+const timersEncuesta = new Map();
+const estadoEncuesta = new Map(); // 'esperando' | 'respondida'
+const ENCUESTA_TIMEOUT = 60000;
 
-function recordarIdioma(telefono, idioma) {
-  if (telefono) idiomasPorTelefono.set(telefono, idioma);
-}
-
-function obtenerIdiomaGuardado(telefono) {
-  return telefono ? idiomasPorTelefono.get(telefono) || null : null;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 🔧 NORMALIZAR - quita tildes y signos
-// ═══════════════════════════════════════════════════════════════════════════
 function normalizar(texto) {
-  return texto.toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[¿¡]/g, '')
-    .trim();
+  return texto.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 🌍 DETECTOR DE IDIOMA MULTILINGÜE
-// ═══════════════════════════════════════════════════════════════════════════
 function detectarIdioma(texto) {
   const msg = normalizar(texto);
+  if (/[áéíóúñ¿¡]/.test(texto)) return 'es';
+  
+  const esPalabras = ['tengo', 'rodilla', 'dolor', 'procedimientos', 'que', 'hola', 'gracias', 'cita', 'agenda', 'duele', 'espalda', 'servicios', 'ofrecen', 'quiero', 'necesito', 'ubicados', 'donde', 'horarios', 'recomiendan', 'vejes', 'envejecimiento', 'manejan', 'buenos', 'dias'];
+  const enPalabras = ['i have', 'knee', 'pain', 'procedures', 'what', 'hello', 'thanks', 'appointment', 'schedule', 'hurt', 'back', 'services', 'offer', 'want', 'need', 'located', 'where', 'hours', 'recommend', 'aging', 'antiaging', 'good', 'morning'];
+  
+  let scoreEs = 0, scoreEn = 0;
+  esPalabras.forEach(function(p) { if (msg.indexOf(p) !== -1) scoreEs++; });
+  enPalabras.forEach(function(p) { if (msg.indexOf(p) !== -1) scoreEn++; });
 
-  const senales = {
-    en: [
-      'hello', 'hi', 'hey', 'hii', 'helloo', 'good morning', 'good afternoon',
-      'good evening', 'howdy', 'sup', 'yes', 'thanks', 'thank you', 'okay',
-      'please', 'help', 'i have', 'i feel', 'my ', 'pain', 'knee', 'hip',
-      'back ', 'neck', 'how much', 'does it work', 'what is', 'stem cell',
-      'doctor', 'appointment', 'schedule', 'book', 'free evaluation',
-      'breathe', 'lung', 'shoulder', 'elbow', 'wrist', 'ankle', 'foot',
-      'chronic', 'therapy', 'treatment', 'cost', 'price', 'where', 'when',
-      'exosome', 'prp', 'hyperbaric', 'longevity', 'effective', 'safe',
-    ],
-    es: [
-      'hola', 'buenas', 'buenos dias', 'buenas tardes', 'buenas noches',
-      'saludos', 'gracias', 'perfecto', 'claro', 'entendido', 'por favor',
-      'si ', 'tengo', 'dolor', 'rodilla', 'cadera', 'espalda', 'cuello',
-      'hombro', 'codo', 'muneca', 'tobillo', 'pie ', 'cuanto cuesta',
-      'como funciona', 'celula madre', 'medico', 'cita', 'agendar',
-      'evaluacion', 'tratamiento', 'terapia', 'precio', 'costo', 'donde',
-      'cuando', 'duele', 'siento', 'padezco', 'sufro', 'problema',
-      'exosoma', 'hiperbarica', 'longevidad', 'efectivo', 'seguro',
-      'funciona', 'sirve', 'quiero', 'necesito', 'puedo',
-    ],
-    pt: [
-      'ola', 'bom dia', 'boa tarde', 'boa noite', 'obrigado', 'obrigada',
-      'sim', 'nao', 'por favor', 'ajuda', 'tenho', 'dor', 'joelho',
-      'quadril', 'costas', 'pescoco', 'ombro', 'cotovelo', 'tornozelo',
-      'quanto custa', 'como funciona', 'celula tronco', 'medico', 'consulta',
-      'agendar', 'avaliacao', 'tratamento', 'terapia', 'preco', 'onde',
-      'quando', 'doi', 'sinto', 'sofro', 'problema', 'exossoma',
-      'hiperbarica', 'longevidade', 'eficaz', 'seguro', 'funciona',
-      'quero', 'preciso', 'posso', 'voce', 'esta',
-    ],
-    fr: [
-      'bonjour', 'bonsoir', 'salut', 'bonne nuit', 'merci', 'oui', 'non',
-      'sil vous plait', 'aide', 'douleur', 'genou', 'hanche', 'dos',
-      'cou', 'epaule', 'coude', 'poignet', 'cheville', 'pied',
-      'combien ca coute', 'comment ca fonctionne', 'cellules souches',
-      'medecin', 'rendez-vous', 'traitement', 'therapie', 'prix', 'ou',
-      'quand', 'fait mal', 'souffre', 'probleme', 'exosome',
-      'hyperbare', 'longevite', 'efficace', 'sur', 'fonctionne',
-      'je veux', 'je besoin', 'je peux', 'vous', 'est-ce que',
-    ],
-    de: [
-      'hallo', 'guten morgen', 'guten tag', 'guten abend', 'danke',
-      'ja ', 'nein', 'bitte', 'hilfe', 'schmerz', 'knie', 'hufte',
-      'rucken', 'nacken', 'schulter', 'ellbogen', 'handgelenk', 'knochel',
-      'wie viel kostet', 'wie funktioniert', 'stammzellen', 'arzt',
-      'termin', 'behandlung', 'therapie', 'preis', 'wo ', 'wann',
-      'tut weh', 'leide', 'problem', 'exosom', 'hyperbar', 'langlebigkeit',
-      'effektiv', 'sicher', 'funktioniert', 'ich will', 'ich brauche',
-      'ich kann', 'sie ', 'ist ',
-    ],
-    it: [
-      'ciao', 'buongiorno', 'buonasera', 'buonanotte', 'grazie', 'si ',
-      'no ', 'per favore', 'aiuto', 'dolore', 'ginocchio', 'anca',
-      'schiena', 'collo', 'spalla', 'gomito', 'polso', 'caviglia',
-      'quanto costa', 'come funziona', 'cellule staminali', 'medico',
-      'appuntamento', 'trattamento', 'terapia', 'prezzo', 'dove',
-      'quando', 'fa male', 'soffro', 'problema', 'esosoma',
-      'iperbarica', 'longevita', 'efficace', 'sicuro', 'funziona',
-      'voglio', 'ho bisogno', 'posso', 'lei ', 'e ',
-    ],
-  };
-
-  const scores = {};
-  for (const [lang, palabras] of Object.entries(senales)) {
-    scores[lang] = palabras.filter(p => msg.includes(p)).length;
-  }
-
-  const maxScore = Math.max(...Object.values(scores));
-  if (maxScore === 0) return null;
-
-  const ganadores = Object.entries(scores).filter(([, v]) => v === maxScore);
-  if (ganadores.length > 1) return null;
-
-  return ganadores[0][0];
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 📝 RESPUESTAS RÁPIDAS (ES y EN)
-// ═══════════════════════════════════════════════════════════════════════════
-function getRespuestaRapida(idioma, mensajeUsuario) {
-  if (idioma !== 'es' && idioma !== 'en') return null;
-
-  const msg = normalizar(mensajeUsuario);
-
-  // ── SALUDOS ──────────────────────────────────────────────────────────
-  if (/^(hi|hello|hey|hii|helloo|good morning|good afternoon|good evening|howdy|sup)[!.\s]*$/.test(msg)) {
-    return `🌿 *Hello! I'm Sofía from Stemwell Regenerative Medicine* 👋\n\nI can help you with:\n• Stem Cell therapy\n• PRP\n• Exosomes\n• Hyperbaric Chamber\n• Longevity protocols\n• FREE evaluation with Dr. Camilo White\n\nWhat brings you here today? 😊`;
-  }
-  if (/^(hola|buenas|buenos dias|buenas tardes|buenas noches|saludos|holaa|buenas!|hola!)[!.\s]*$/.test(msg)) {
-    return `🌿 *¡Hola! Soy Sofía de Stemwell Medicina Regenerativa* 👋\n\nPuedo ayudarte con:\n• Células Madre\n• PRP\n• Exosomas\n• Cámara Hiperbárica\n• Protocolos de longevidad\n• Evaluación SIN COSTO con el Dr. Camilo White\n\n¿En qué puedo ayudarte hoy? 😊`;
-  }
-
-  // ── DIFERENCIA ENTRE SERVICIOS ───────────────────────────────────────
-  if (/difference|different|compare|services|all services|what.*services|difference.*service|diferencia|comparar|todos.*servicios|que.*servicios|servicios.*ofrecen/.test(msg)) {
-    return `🌿 *Stemwell Services Overview:*\n\n🧬 *Stem Cell Therapy* - Helps repair damaged tissue and reduce inflammation.\n💉 *PRP* - Uses your own blood platelets to stimulate healing.\n🔬 *Exosomes* - Advanced cellular messengers that support tissue repair.\n🫁 *Hyperbaric Chamber* - Increases oxygen delivery and promotes healing.\n💊 *IV Therapy* - Provides NAD+, glutathione, vitamins and nutrients.\n✨ *Longevity Protocols* - Programs focused on healthy aging and wellness.\n\n📅 FREE Evaluation: ${AGENDA_URL}`;
-  }
-
-  // ── SHOULDER PAIN ────────────────────────────────────────────────────
-  if (/shoulder pain|pain.*shoulder|shoulder injury|rotator cuff|hombro.*duele|duele.*hombro|hombro.*dolor|dolor.*hombro/.test(msg)) {
-    return `🩺 *Shoulder Pain Treatment*\n\nStemwell offers regenerative therapies that may help with:\n\n• Rotator cuff injuries\n• Tendon inflammation\n• Arthritis\n• Chronic shoulder pain\n• Sports injuries\n\nAvailable options:\n🧬 Stem Cells\n💉 PRP\n🔬 Exosomes\n🫁 Hyperbaric Chamber\n\n📅 FREE Evaluation: ${AGENDA_URL}`;
-  }
-
-  // ── CAN STEM CELLS HELP ME ───────────────────────────────────────────
-  if (/can stem cells help|stem cells help me|can stemcell help|stemcell help|celulas madre.*ayudar|celula madre.*ayudar|pueden.*ayudar.*celulas/.test(msg)) {
-    return `🧬 *Stem Cell Therapy*\n\nStem cell therapy may help reduce inflammation and support tissue repair for many orthopedic and chronic conditions.\n\nThe best way to determine if you are a candidate is through a FREE evaluation with one of our specialists.\n\n📞 +57 310 406 8755\n📅 ${AGENDA_URL}`;
-  }
-
-  // ── AGENDAR / CITA ───────────────────────────────────────────────────
-  if (/agendar|como.*cita|quiero.*cita|pedir.*cita|reservar|como.*consulta|quiero.*consulta|book|schedule|appointment/.test(msg)) {
-    return idioma === 'en'
-      ? `📅 *Schedule your FREE evaluation!*\n\nBook directly here:\n🔗 ${AGENDA_URL}\n\nOr share your full name and email and we'll schedule it for you 😊`
-      : `📅 *¡Agenda tu evaluación SIN COSTO!*\n\nAgenda directamente aquí:\n🔗 ${AGENDA_URL}\n\nO comparte tu nombre completo y correo y nosotros te agendamos 😊`;
-  }
-
-  // ── RESPIRACIÓN / PULMONES ───────────────────────────────────────────
-  if (/respir|pulmon|asma|epoc|bronquitis|oxigeno|alergia|breathe|lung|asthma|falta.*aire|ahog/.test(msg)) {
-    return idioma === 'en'
-      ? `🫁 *Respiratory & Lung Conditions:*\n\n• *Hyperbaric Chamber*: Increases blood oxygen up to 15x\n• *Exosomes*: Reduce lung inflammation\n• *IV Therapy*: Glutathione supports lung health\n• *Stem Cells*: May help regenerate lung tissue\n\n⚠️ Each case is unique.\n🔗 FREE evaluation: ${AGENDA_URL}`
-      : `🫁 *Condiciones Respiratorias:*\n\n• *Cámara Hiperbárica*: Aumenta oxígeno hasta 15x\n• *Exosomas*: Reducen inflamación pulmonar\n• *Sueroterapia*: Glutatión apoya salud pulmonar\n• *Células Madre*: Pueden regenerar tejido pulmonar\n\n⚠️ Cada caso es único.\n🔗 Evaluación SIN COSTO: ${AGENDA_URL}`;
-  }
-
-  // ── NEUROLOGÍA ───────────────────────────────────────────────────────
-  if (/alzheimer|parkinson|neurologico|demencia|memoria|esclerosis|neuropatia|migrana/.test(msg)) {
-    return idioma === 'en'
-      ? `🧠 *Neurological Conditions:*\n\n• *Stem Cells*: Reduce neuroinflammation\n• *Exosomes*: Repair signals to damaged neurons\n• *Hyperbaric Chamber*: Improves brain oxygenation\n\n⚠️ Results vary per patient.\n🔗 FREE evaluation: ${AGENDA_URL}`
-      : `🧠 *Condiciones Neurológicas:*\n\n• *Células Madre*: Reducen neuroinflamación\n• *Exosomas*: Señales de reparación neuronal\n• *Cámara Hiperbárica*: Mejora oxigenación cerebral\n\n⚠️ Resultados varían por paciente.\n🔗 Evaluación SIN COSTO: ${AGENDA_URL}`;
-  }
-
-  // ── EXOSOMAS ─────────────────────────────────────────────────────────
-  if (/exosoma|exosome/.test(msg)) {
-    return idioma === 'en'
-      ? `🔬 *Exosomes:*\n\nNanoparticles from stem cells carrying proteins, RNA and growth factors to damaged cells.\n✨ Cellular repair, reduce inflammation, enhance healing.\n\n🔗 ${AGENDA_URL}`
-      : `🔬 *Exosomas:*\n\nNanopartículas que transportan proteínas, ARN y factores de crecimiento a células dañadas.\n✨ Reparación celular, reducen inflamación, potencian curación.\n\n🔗 ${AGENDA_URL}`;
-  }
-
-  // ── PRP ──────────────────────────────────────────────────────────────
-  if (/\bprp\b|plasma rico/.test(msg)) {
-    return idioma === 'en'
-      ? `💉 *PRP:*\n\nPlatelet-Rich Plasma from your own blood. No rejection risk. Stimulates natural tissue repair.\n\n🔗 ${AGENDA_URL}`
-      : `💉 *PRP:*\n\nPlasma Rico en Plaquetas de tu propia sangre. Sin riesgo de rechazo. Estimula reparación natural.\n\n🔗 ${AGENDA_URL}`;
-  }
-
-  // ── CÉLULAS MADRE ────────────────────────────────────────────────────
-  if (/celula madre|stem cell|mesenquimal/.test(msg)) {
-    return idioma === 'en'
-      ? `🧬 *Mesenchymal Stem Cells:*\n\nMultipotent cells from donated umbilical cord.\n✅ 30,000+ studies. Safe, no rejection, no tumors.\n\n🔗 ${AGENDA_URL}`
-      : `🧬 *Células Madre Mesenquimales:*\n\nCélulas multipotentes de cordón umbilical donado.\n✅ 30,000+ estudios. Seguras, sin rechazo, no forman tumores.\n\n🔗 ${AGENDA_URL}`;
-  }
-
-  // ── LONGEVIDAD ───────────────────────────────────────────────────────
-  if (/vejez|envejecimiento|longevidad|antiaging|arrugas|rejuvenecer|cansancio|fatiga|energia|vitalidad/.test(msg)) {
-    return idioma === 'en'
-      ? `✨ *Longevity Protocols:*\n\n• Stem Cells • Exosomes • NAD+ IV Therapy • Hyperbaric Chamber\n\n🔗 FREE evaluation: ${AGENDA_URL}`
-      : `✨ *Protocolos de Longevidad:*\n\n• Células Madre • Exosomas • Sueroterapia NAD+ • Cámara Hiperbárica\n\n🔗 Evaluación SIN COSTO: ${AGENDA_URL}`;
-  }
-
-  // ── HIPERBÁRICA ──────────────────────────────────────────────────────
-  if (/hiperbarica|hyperbaric|camara de oxigeno/.test(msg)) {
-    return idioma === 'en'
-      ? `🫁 *Hyperbaric Chamber:*\n\n100% oxygen under pressure. Up to 15x more oxygen in blood.\n✨ Accelerates healing, reduces inflammation, improves cognition.\n\n🔗 ${AGENDA_URL}`
-      : `🫁 *Cámara Hiperbárica:*\n\nOxígeno al 100% en cámara presurizada. Hasta 15x más oxígeno en sangre.\n✨ Acelera curación, reduce inflamación, mejora cognición.\n\n🔗 ${AGENDA_URL}`;
-  }
-
-  // ── SUEROTERAPIA ─────────────────────────────────────────────────────
-  if (/sueroterapia|vitamina|intravenosa|\bnad\b|glutation|magnesio/.test(msg)) {
-    return idioma === 'en'
-      ? `💊 *IV Therapy:*\n\nNAD+, Glutathione, Vitamin C, Magnesium, Zinc.\n✨ Restores energy, boosts immunity, supports regeneration.\n\n🔗 ${AGENDA_URL}`
-      : `💊 *Sueroterapia:*\n\nNAD+, Glutatión, Vitamina C, Magnesio, Zinc.\n✨ Restaura energía, refuerza inmunidad, apoya regeneración.\n\n🔗 ${AGENDA_URL}`;
-  }
-
-  // ── DOLOR / LESIONES / ARTICULACIONES ────────────────────────────────
-  if (/dolor|lesion|molestia|inflamacion|hinch|rodilla|knee|cadera|\bhip\b|espalda|\bback\b|cuello|neck|nuca|cervical|hombro|shoulder|codo|elbow|muneca|wrist|mano|\bhand\b|dedo|finger|tobillo|ankle|\bpie\b|\bfoot\b|talon|artrosis|artritis|arthritis|osteoartritis|desgaste|cartilago|tendinitis|tendon|ligamento|hernia|ciatica|fibromialgia|lupus|autoinmune|menisco|fractura|esguince|columna|disco|muscular|articulacion|joint|trabajo.*duele|duele.*trabajo|oficina.*duele|duele.*oficina|computador|escritorio|teclado|mouse/.test(msg)) {
-    return idioma === 'en'
-      ? `🩺 *Procedures for Pain & Injuries:*\n\n• *Stem Cells*: Regenerate tissue, reduce inflammation\n• *PRP*: Accelerate healing, reduce pain\n• *Exosomes*: Advanced cellular repair\n• *Hyperbaric Chamber*: Speed up recovery\n• *IV Therapy*: Restore healing nutrients\n\n✨ Many patients improve in 4-8 weeks.\n🔗 FREE evaluation: ${AGENDA_URL}`
-      : `🩺 *Procedimientos para Dolor y Lesiones:*\n\n• *Células Madre*: Regeneran tejido, reducen inflamación\n• *PRP*: Acelera curación, reduce dolor\n• *Exosomas*: Reparación celular avanzada\n• *Cámara Hiperbárica*: Acelera recuperación\n• *Sueroterapia*: Restaura nutrientes curativos\n\n✨ Muchos pacientes mejoran en 4-8 semanas.\n🔗 Evaluación SIN COSTO: ${AGENDA_URL}`;
-  }
-
-  // ── PRECIOS ──────────────────────────────────────────────────────────
-  if (/precio|costo|price|cost|cuanto|valen|cuesta|how much|\bvale\b|tarifa|inversion/.test(msg)) {
-    return idioma === 'en'
-      ? `💰 *About pricing:*\n\nPrices vary by procedure, sessions, and medical condition.\nBest way to get an exact quote: FREE evaluation.\n\n🔗 ${AGENDA_URL}`
-      : `💰 *Sobre precios:*\n\nLos precios varían según procedimiento, sesiones y condición médica.\nLa mejor forma de obtener presupuesto exacto: evaluación SIN COSTO.\n\n🔗 ${AGENDA_URL}`;
-  }
-
-  // ── UBICACIÓN / CONTACTO ─────────────────────────────────────────────
-  if (/ubicados|direccion|donde|ubicacion|horario|telefono|contacto|sede|where|location|address/.test(msg)) {
-    return idioma === 'en'
-      ? `📍 *Location:*\nKr 13 #118-08, Usaquén, Bogotá D.C.\n🕒 Mon-Fri 8am-5pm, Sat 8am-12pm\n📞 +57 310 406 8755\n📧 info@stemwell.co\n\n🔗 ${AGENDA_URL}`
-      : `📍 *Ubicación:*\nKr 13 #118-08, Usaquén, Bogotá D.C.\n🕒 Lun-Vie 8am-5pm, Sáb 8am-12pm\n📞 +57 310 406 8755\n📧 info@stemwell.co\n\n🔗 ${AGENDA_URL}`;
-  }
-
-  // ── EFECTIVIDAD / SEGURIDAD ──────────────────────────────────────────
-  if (/funciona|sirve|efectivo|resultados|seguro|riesgo|garantia|evidencia|estudios|cura|probado/.test(msg)) {
-    return idioma === 'en'
-      ? `🔍 *Does it work?*\n\n📊 30,000+ studies. Approved in 40+ countries. Many patients improve — not all respond the same.\n\n✅ FREE evaluation determines if YOU are a candidate.\n🔗 ${AGENDA_URL}`
-      : `🔍 *¿Funciona?*\n\n📊 30,000+ estudios. Aprobado en 40+ países. Muchos mejoran — no todos responden igual.\n\n✅ Evaluación SIN COSTO determina si TÚ eres candidato.\n🔗 ${AGENDA_URL}`;
-  }
-
-  // ── DOCTOR / EQUIPO ──────────────────────────────────────────────────
-  if (/doctor|\bdr\b|medico|especialista|camilo|white|sandra|equipo|quien atiende/.test(msg)) {
-    return idioma === 'en'
-      ? `👨‍⚕️ *Medical Team:*\n• Dr. Camilo White - Medical Director\n• Sandra - Clinical Advisor\n\n🔗 FREE evaluation: ${AGENDA_URL}`
-      : `👨‍⚕️ *Equipo Médico:*\n• Dr. Camilo White - Director Médico\n• Sandra - Asesora Clínica\n\n🔗 Evaluación SIN COSTO: ${AGENDA_URL}`;
-  }
-
+  if (scoreEs > scoreEn && scoreEs >= 1) return 'es';
+  if (scoreEn > scoreEs && scoreEn >= 1) return 'en';
   return null;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 🤖 LM STUDIO - responde en el idioma del usuario
-// ═══════════════════════════════════════════════════════════════════════════
-async function responderConLMStudio(mensajeUsuario, idioma) {
-  const instruccionIdioma = idioma
-    ? `CRITICAL RULE: The user is writing in language "${idioma}". You MUST respond in that EXACT same language. Do NOT switch to English or Spanish unless that is the detected language code.`
-    : `CRITICAL RULE: Detect the language the user is writing in and respond in that EXACT same language. Mirror their language perfectly.`;
-
-  const systemPrompt = `You are Sofía, assistant for Stemwell Regenerative Medicine clinic in Bogotá, Colombia (Kr 13 #118-08, Usaquén).
-Services: Mesenchymal Stem Cells, PRP, Exosomes, Hyperbaric Chamber, IV Therapy (NAD+, Glutathione), Longevity Protocols.
-Medical director: Dr. Camilo White. Phone: +57 310 406 8755. Booking: ${AGENDA_URL}
-
-${instruccionIdioma}
-
-RULES:
-1. Always respond in the user's language — match their language exactly, no exceptions
-2. Be warm and concise — maximum 4 sentences
-3. If asked about any health condition or body pain, explain how Stemwell treatments can help
-4. ALWAYS end with the booking link: ${AGENDA_URL}
-5. Do NOT ask for more context — answer with what the user said
-6. Do NOT mention exercises, gyms, or anything unrelated to Stemwell
-7. Use simple messaging app language with 1-2 emojis`;
-
-  console.log('🚀 LM URL:', LM_STUDIO_URL);
-  console.log('🤖 LM MODEL:', LM_MODEL);
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 30000); // ← AUMENTADO
-
-  const response = await fetch(LM_STUDIO_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: LM_MODEL,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: mensajeUsuario }
-      ],
-      temperature: 0.3,
-      max_tokens: 250,
-      stream: false
-    }),
-    signal: controller.signal
-  });
-
-  clearTimeout(timeoutId);
-  if (!response.ok) throw new Error(`LM Studio HTTP ${response.status}`);
-  const data = await response.json();
-  const respuesta = data.choices?.[0]?.message?.content?.trim();
-  if (!respuesta || respuesta.length < 10) throw new Error('Respuesta vacía');
-  return respuesta;
+function iniciarTimerEncuesta(telefono, idioma, sendMessageFn) {
+  if (!sendMessageFn) return;
+  if (timersEncuesta.has(telefono)) clearTimeout(timersEncuesta.get(telefono));
+  
+  var timer = setTimeout(function() {
+    if (estadoEncuesta.get(telefono) === 'respondida') return;
+    estadoEncuesta.set(telefono, 'esperando');
+    var encuesta = (idioma === 'en')
+      ? '\u270f *Quick Survey*\n\nHave you scheduled your consultation with my help?\n\nReply: YES / NO'
+      : '\u270f *Encuesta Rápida*\n\n\u00bfHas logrado agendar consulta con mi ayuda?\n\nResponde: S\u00cd / NO';
+    sendMessageFn(telefono, encuesta);
+    timersEncuesta.delete(telefono);
+  }, ENCUESTA_TIMEOUT);
+  
+  timersEncuesta.set(telefono, timer);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 🧠 FUNCIÓN PRINCIPAL
-// ═══════════════════════════════════════════════════════════════════════════
-async function responderConIA(mensajeUsuario, nombreUsuario, telefono, idiomaForzado = null) {
+function detenerTimerEncuesta(telefono) {
+  if (timersEncuesta.has(telefono)) {
+    clearTimeout(timersEncuesta.get(telefono));
+    timersEncuesta.delete(telefono);
+  }
+}
 
-  let idioma;
+function esRespuestaEncuesta(texto) {
+  var t = normalizar(texto);
+  return /^(si|sí|yes|no|nop|nope)$/i.test(t);
+}
 
-  if (idiomaForzado) {
-    idioma = idiomaForzado;
+function getRespuestaEncuesta(idioma, texto) {
+  var t = normalizar(texto);
+  var esPositivo = /^(si|sí|yes)$/i.test(t);
+  
+  if (esPositivo) {
+    return (idioma === 'en')
+      ? '\u00a1Wonderful! \u00a0I\'m so glad I could help you. \u00a0\n\nIf you have any other questions in the future, don\'t hesitate to reach out. We\'re here for you at Stemwell. \u00a0'
+      : '\u00a1Qu\u00e9 gusto! \u00a0Me alegra mucho haber podido ayudarte. \u00a0\n\nSi tienes cualquier otra duda en el futuro, no dudes en contactarnos. Estamos para servirte en Stemwell. \u00a0';
   } else {
-    const detectado = detectarIdioma(mensajeUsuario);
-    if (detectado) {
-      idioma = detectado;
-      recordarIdioma(telefono, idioma);
-    } else {
-      idioma = obtenerIdiomaGuardado(telefono) || 'es';
-    }
+    return (idioma === 'en')
+      ? 'No problem! \u00a0I\'m here to help. Would you like me to assist you with scheduling your FREE evaluation?\n\n\u00a0 Book: ' + AGENDA_URL
+      : '\u00a1No hay problema! \u00a0Estoy aqu\u00ed para ayudarte. \u00bfTe gustar\u00eda que te ayude a agendar tu evaluaci\u00f3n SIN COSTO?\n\n\u00a0 Agenda: ' + AGENDA_URL;
+  }
+}
+
+function esPreguntaServicios(texto) {
+  var t = normalizar(texto);
+  return /(que|qué|cuales|quais|what|which).*(procedimiento|servicio|tratamiento|procedure|service|treatment|manejan|ofrecen|tienen|offer|have)/i.test(t) ||
+         /list.*(servicio|procedimiento|service|procedure)/i.test(t);
+}
+
+function getListaServicios(idioma) {
+  return (idioma === 'en')
+    ? '\u00a0 *Stemwell Services:*\n\n\u00a0 *Stem Cells* - Mesenchymal cells for tissue repair\n\u00a0 *PRP* - Platelet-Rich Plasma from your own blood\n\u00a0 *Exosomes* - Cellular messengers for regeneration\n\u00a0 *Hyperbaric Chamber* - 100% oxygen therapy\n\u00a0 *IV Therapy* - NAD+, Glutathione, vitamins\n\u00a0 *Longevity* - Wellness & healthy aging programs\n\n\u00a0 Each case is unique. Schedule your FREE evaluation:\n' + AGENDA_URL
+    : '\u00a0 *Servicios Stemwell:*\n\n\u00a0 *C\u00e9lulas Madre* - C\u00e9lulas mesenquimales para reparaci\u00f3n de tejidos\n\u00a0 *PRP* - Plasma Rico en Plaquetas de tu propia sangre\n\u00a0 *Exosomas* - Mensajeros celulares para regeneraci\u00f3n\n\u00a0 *C\u00e1mara Hiperb\u00e1rica* - Oxigenaci\u00f3n al 100%\n\u00a0 *Sueroterapia* - NAD+, Glutati\u00f3n, vitaminas\n\u00a0 *Longevidad* - Programas de bienestar y anti-envejecimiento\n\n\u00a0 Cada caso es \u00fanico. Agenda tu evaluaci\u00f3n SIN COSTO:\n' + AGENDA_URL;
+}
+
+async function responderConLMStudio(mensajeUsuario, idioma) {
+  const systemPromptES = 'Eres Sof\u00eda, asesora de Stemwell Medicina Regenerativa en Bogot\u00e1, Colombia.\n\nDATOS:\n- Direcci\u00f3n: Kr 13 #118-08, Usaqu\u00e9n, Bogot\u00e1\n- Tel\u00e9fono: +57 310 406 8755\n- Horarios: Lunes a Viernes 8am-5pm, S\u00e1bados 8am-12pm\n- Agenda SIN COSTO: ' + AGENDA_URL + '\n\nSERVICIOS: C\u00e9lulas Madre, PRP, Exosomas, C\u00e1mara Hiperb\u00e1rica, Sueroterapia, Longevidad.\nEQUIPO: Dr. Camilo White (Director M\u00e9dico), Dra. Sandra (Asesora Cl\u00ednica).\n\nREGLAS:\n1. SOLO ESPA\u00d1OL.\n2. S\u00e9 c\u00e1lida y emp\u00e1tica.\n3. NUNCA afirmes cura o garant\u00eda.\n4. Si preguntan servicios, MENCI\u00d3NALOS.\n5. Si preguntan por doctores, DI sus nombres.\n6. Invita a agendar: ' + AGENDA_URL;
+
+  const systemPromptEN = 'You are Sofia, Stemwell Regenerative Medicine assistant in Bogot\u00e1, Colombia.\n\nINFO:\n- Address: Kr 13 #118-08, Usaqu\u00e9n, Bogot\u00e1\n- Phone: +57 310 406 8755\n- Hours: Mon-Fri 8am-5pm, Sat 8am-12pm\n- FREE evaluation: ' + AGENDA_URL + '\n\nSERVICES: Stem Cells, PRP, Exosomes, Hyperbaric Chamber, IV Therapy, Longevity.\nTEAM: Dr. Camilo White (Medical Director), Dr. Sandra (Clinical Advisor).\n\nRULES:\n1. ONLY ENGLISH.\n2. Be warm and empathetic.\n3. NEVER claim cure or guarantee.\n4. If asked services, LIST them.\n5. If asked doctors, SAY their names.\n6. Invite to book: ' + AGENDA_URL;
+
+  const systemPrompt = (idioma === 'en') ? systemPromptEN : systemPromptES;
+  const instruccion = (idioma === 'en') ? 'IMPORTANT: Respond in English only.' : 'IMPORTANTE: Responde en espa\u00f1ol solamente.';
+  const mensajeReforzado = instruccion + '\n\nUsuario: ' + mensajeUsuario;
+
+  var controller = new AbortController();
+  var timeoutId = setTimeout(function() { controller.abort(); }, 30000);
+
+  try {
+    var response = await fetch(LM_STUDIO_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: LM_MODEL,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: mensajeReforzado }
+        ],
+        temperature: 0.5,
+        max_tokens: 300,
+        stream: false
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+    if (!response.ok) throw new Error('LM Studio HTTP ' + response.status);
+    
+    var data = await response.json();
+    var respuesta = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content ? data.choices[0].message.content.trim() : '';
+    
+    if (!respuesta || respuesta.length < 10) throw new Error('Empty');
+    
+    return respuesta;
+
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
+  }
+}
+
+async function responderConIA(mensajeUsuario, nombreUsuario, telefono, idiomaForzado, sendMessageFn) {
+  if (!sendMessageFn) sendMessageFn = null;
+
+  var nuevoIdioma = detectarIdioma(mensajeUsuario);
+  var idiomaGuardado = idiomasPorTelefono.get(telefono) || 'es';
+  var idioma = idiomaForzado || nuevoIdioma || idiomaGuardado;
+  idiomasPorTelefono.set(telefono, idioma);
+
+  // ═══ MANEJAR RESPUESTA DE ENCUESTA ═══
+  if (estadoEncuesta.get(telefono) === 'esperando' && esRespuestaEncuesta(mensajeUsuario)) {
+    estadoEncuesta.set(telefono, 'respondida');
+    detenerTimerEncuesta(telefono);
+    console.log('\u00a0 Encuesta respondida: ' + mensajeUsuario);
+    return getRespuestaEncuesta(idioma, mensajeUsuario);
   }
 
-  const flagEmoji = { en: '🇺🇸', es: '🇪🇸', pt: '🇧🇷', fr: '🇫🇷', de: '🇩🇪', it: '🇮🇹' };
-  console.log(`🌐 [IA] ${flagEmoji[idioma] || '🌍'} ${idioma.toUpperCase()} (tel: ${telefono}) "${mensajeUsuario.substring(0, 60)}"`);
+  detenerTimerEncuesta(telefono);
 
-  // PASO 1: Conocimiento aprendido
-  try {
-    const conocimiento = await buscarEnConocimiento(mensajeUsuario, idioma);
-    if (conocimiento && conocimiento.confianza > 0.6) {
-      console.log(`📚 [IA] Conocimiento aprendido (${conocimiento.confianza})`);
-      return conocimiento.respuesta;
-    }
-  } catch (e) {}
-
-  // PASO 2: Respuestas rápidas
-  const rapida = getRespuestaRapida(idioma, mensajeUsuario);
-  if (rapida) {
-    console.log(`⚡ [IA] Respuesta rápida`);
-    return rapida;
+  // ═══ PREGUNTA DE SERVICIOS: Respuesta directa ═══
+  if (esPreguntaServicios(mensajeUsuario)) {
+    console.log('\u00a0 Lista de servicios');
+    if (sendMessageFn) iniciarTimerEncuesta(telefono, idioma, sendMessageFn);
+    return getListaServicios(idioma);
   }
 
-  // PASO 3: LM Studio
-  console.log(`🤖 [IA] → LM Studio (${LM_MODEL}) [${idioma}]`);
+  // ═══ LM STUDIO ═══
   try {
-    const respuesta = await responderConLMStudio(mensajeUsuario, idioma);
-    console.log(`✅ [IA] LM Studio OK (${respuesta.length} chars)`);
+    var respuesta = await responderConLMStudio(mensajeUsuario, idioma);
+    console.log('\u2705 LM Studio OK');
     try { await guardarConocimiento(mensajeUsuario, respuesta, idioma, 0.7); } catch (e) {}
+    if (sendMessageFn) iniciarTimerEncuesta(telefono, idioma, sendMessageFn);
     return respuesta;
   } catch (e) {
-    console.log(`⚠️ [IA] LM Studio falló: ${e.message}`);
-    // Fallback mejorado
-    if (idioma === 'en') {
-      return `🌿 Stemwell offers regenerative treatments including Stem Cells, PRP, Exosomes, Hyperbaric Therapy and Longevity Programs.\n\n📍 Kr 13 #118-08, Usaquén, Bogotá\n📞 +57 310 406 8755\n\n🕒 Mon-Fri 8:00 AM - 5:00 PM\n🕒 Sat 8:00 AM - 12:00 PM\n\n📅 FREE Evaluation:\n${AGENDA_URL}`;
-    } else if (idioma === 'es') {
-      return `🌿 Stemwell ofrece tratamientos regenerativos: Células Madre, PRP, Exosomas, Terapia Hiperbárica y Programas de Longevidad.\n\n📍 Kr 13 #118-08, Usaquén, Bogotá\n📞 +57 310 406 8755\n\n🕒 Lun-Vie 8:00 AM - 5:00 PM\n🕒 Sáb 8:00 AM - 12:00 PM\n\n📅 Evaluación SIN COSTO:\n${AGENDA_URL}`;
-    } else {
-      return `🌿 Dr. Camilo White – Stemwell Regenerative Medicine\n📍 Kr 13 #118-08, Bogotá\n📞 +57 310 406 8755\n🔗 ${AGENDA_URL}`;
-    }
+    console.log('\u26a0 LM Studio fall\u00f3');
+    var fallback = (idioma === 'en')
+      ? '\u00a0 Thank you for contacting Stemwell.\n\n Kr 13 #118-08, Bogot\u00e1\n +57 310 406 8755\n Book: ' + AGENDA_URL
+      : '\u00a0 Gracias por contactar a Stemwell.\n\n Kr 13 #118-08, Bogot\u00e1\n +57 310 406 8755\n Agenda: ' + AGENDA_URL;
+    if (sendMessageFn) iniciarTimerEncuesta(telefono, idioma, sendMessageFn);
+    return fallback;
   }
 }
 
-module.exports = { responderConIA, detectarIdioma };
+module.exports = { responderConIA: responderConIA, detectarIdioma: detectarIdioma };

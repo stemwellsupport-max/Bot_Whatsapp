@@ -401,6 +401,36 @@ async function eliminarConocimiento(id) {
   console.log(`🗑️ [Aprendizaje] Conocimiento ID ${id} desactivado`);
 }
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔍 OBTENER ÚLTIMO CONTEXTO DEL USUARIO
+// (Para saber qué preguntaba cuando responde encuesta)
+// ═══════════════════════════════════════════════════════════════════════════
+async function getUltimoContexto(telefono) {
+  try {
+    // Buscar la última pregunta que hizo este usuario
+    const result = await pool.query(`
+      SELECT mensaje as pregunta, fecha
+      FROM wa_conversaciones
+      WHERE telefono = $1 
+        AND direccion = 'entrada'
+      ORDER BY fecha DESC
+      LIMIT 1
+    `, [telefono]);
+    
+    if (result.rows.length > 0) {
+      return {
+        pregunta: result.rows[0].pregunta,
+        fecha: result.rows[0].fecha
+      };
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('❌ [getUltimoContexto] Error:', error.message);
+    return null;
+  }
+}
 // ═══════════════════════════════════════════════════════════════════════════
 // 📤 EXPORTAR TODO
 // ═══════════════════════════════════════════════════════════════════════════
@@ -433,7 +463,7 @@ module.exports = {
   guardarMensajeRAG,
   getHistorialRAG,
   
-  // 🧠 APRENDIZAJE AUTOMÁTICO (nuevas funciones)
+  // 🧠 APRENDIZAJE AUTOMÁTICO
   normalizarPregunta,
   buscarEnConocimiento,
   guardarConocimiento,
@@ -441,4 +471,7 @@ module.exports = {
   getEstadisticasAprendizaje,
   listarConocimiento,
   eliminarConocimiento,
+  
+  // 🆕 CONTEXTO DE USUARIO
+  getUltimoContexto,
 };
