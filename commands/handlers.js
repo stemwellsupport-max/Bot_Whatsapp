@@ -71,11 +71,14 @@ function esHoraValida(texto) {
 
 function extraerHora(texto) {
   const t = normalizarAux(texto);
+  // Acepta: "10:00", "🕐 10:00", "a las 10", "10h"
   const m = t.match(/(\d{1,2})(?::(\d{2}))?/);
   if (!m) return null;
-  const h = String(parseInt(m[1], 10)).padStart(2, '0');
-  const min = m[2] ? m[2] : '00';
-  return h + ':' + min;
+  const h = parseInt(m[1], 10);
+  const min = m[2] ? parseInt(m[2], 10) : 0;
+  // Solo horarios válidos de atención: 8:00 - 17:45
+  if (h < 8 || h > 17 || min < 0 || min >= 60) return null;
+  return String(h).padStart(2, '0') + ':' + String(min).padStart(2, '0');
 }
 
 // ── Reconocer si un texto parece un email ──────────────────
@@ -177,7 +180,11 @@ function fechaParaDia(diaSemana) {
 function extraerDiaSeleccionado(texto) {
   const t = normalizarAux(texto);
   for (let i = 0; i < DIAS_MENU.length; i++) {
-    if (t.startsWith(normalizarAux(DIAS_MENU[i]))) return normalizarAux(DIAS_MENU[i]);
+    const dia = normalizarAux(DIAS_MENU[i]);
+    // Acepta el día en cualquier posición: "Jueves", "📅 Jueves", "dia_jueves", etc.
+    if (t === dia || t.startsWith(dia) || t.includes(dia) || t === 'dia_' + dia) {
+      return dia;
+    }
   }
   return null;
 }
@@ -379,7 +386,18 @@ async function handleIncomingMessage(message, contact) {
           await agenda.setEstadoAgenda(telefono, { ...st, paso: 'seleccionar_hora', fecha: fecha.getTime(), horarios: libres });
         }
       } else {
-        respuesta = 'Por favor elige un día de la lista. 📅';
+        listRespuesta = {
+          texto: 'Por favor elige un día de la lista. 📅',
+          buttonLabel: 'Elegir día',
+          sections: [{
+            title: 'Día de la cita',
+            rows: DIAS_MENU.map(d => ({
+              id: 'dia_' + normalizarAux(d),
+              title: d,
+              description: formatearFecha(fechaParaDia(normalizarAux(d))),
+            })),
+          }],
+        };
       }
     }
 
