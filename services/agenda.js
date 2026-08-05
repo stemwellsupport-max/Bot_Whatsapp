@@ -625,41 +625,66 @@ async function apiCrearLead({ nombre, telefono, email, canal = 'WhatsApp', notas
 }
 
 // Agendar / reagendar / cancelar una cita en wa_citas
-async function apiAgendar({ leadId, estado, fecha, hora, doctorId, tipoConsulta, notas }) {
+async function apiAgendar({ leadId, estado, fecha, hora, doctorId, tipoConsulta, notas, email }) {
   try {
     // Si es cancelación actualizamos el estado
     if (estado === 'Canceled') {
-      await pool.query(
-        `UPDATE wa_citas SET estado = 'cancelada', actualizado_en = NOW()
-         WHERE telefono = (SELECT telefono FROM wa_contactos WHERE id = $1)
-           AND estado IN ('confirmada', 'pendiente')`,
-        [leadId]
-      );
+      // Intentar cancelar por leadId en wa_contactos; si no, por teléfono directamente
+      const ct = await pool.query(
+        `SELECT telefono FROM wa_contactos WHERE id = $1`, [leadId]
+      ).catch(() => ({ rows: [] }));
+      if (ct.rows.length) {
+        await pool.query(
+          `UPDATE wa_citas SET estado = 'cancelada', actualizado_en = NOW()
+           WHERE telefono = $1 AND estado IN ('confirmada', 'pendiente')`,
+          [ct.rows[0].telefono]
+        );
+      }
       console.log('✅ [apiAgendar] Cita cancelada para lead:', leadId);
       return;
     }
 
     // Para reagendar actualizamos; para agendar insertamos
-    const contacto = await pool.query(
-      `SELECT telefono, nombre FROM wa_contactos WHERE id = $1`, [leadId]
-    );
-    if (!contacto.rows.length) throw new Error('Lead no encontrado: ' + leadId);
+    // Buscar contacto en wa_contactos. Si no existe (es lead del CRM), usamos el leadId directamente.
+    let contacto = await pool.query(
+      `SELECT telefono, nombre, email FROM wa_contactos WHERE id = $1`, [leadId]
+    ).catch(() => ({ rows: [] }));
+
+    // Si no encontró en wa_contactos, buscar en leads (CRM)
+    if (!contacto.rows.length) {
+      contacto = await pool.query(
+        `SELECT telefono, nombre, email FROM leads WHERE id = $1`, [leadId]
+      ).catch(() => ({ rows: [] }));
+    }
+
+    if (!contacto.rows.length) throw new Error('Contacto no encontrado para leadId: ' + leadId);
 
     const { telefono, nombre } = contacto.rows[0];
+    const emailFinal = email || contacto.rows[0].email || '';
     const esReagenda = estado === 'Rescheduled';
 
     if (esReagenda) {
-      await pool.query(
+      // Intentar actualizar cita existente; si no hay, insertar una nueva
+      const updated = await pool.query(
         `UPDATE wa_citas SET fecha_cita = $1, hora_cita = $2, estado = 'confirmada',
            notas = $3, actualizado_en = NOW()
-         WHERE telefono = $4 AND estado IN ('confirmada', 'pendiente')`,
+         WHERE telefono = $4 AND estado IN ('confirmada', 'pendiente')
+         RETURNING id`,
         [fecha, hora, notas || '', telefono]
       );
+      if (!updated.rows.length) {
+        // No había cita previa en wa_citas, insertar nueva
+        await pool.query(
+          `INSERT INTO wa_citas (telefono, nombre_paciente, email, fecha_cita, hora_cita, tratamiento, notas, estado)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, 'confirmada')`,
+          [telefono, nombre, emailFinal, fecha, hora, tipoConsulta || 'Consulta', notas || '']
+        );
+      }
     } else {
       await pool.query(
-        `INSERT INTO wa_citas (telefono, nombre_paciente, fecha_cita, hora_cita, tratamiento, notas, estado)
-         VALUES ($1, $2, $3, $4, $5, $6, 'confirmada')`,
-        [telefono, nombre, fecha, hora, tipoConsulta || 'Consulta', notas || '']
+        `INSERT INTO wa_citas (telefono, nombre_paciente, email, fecha_cita, hora_cita, tratamiento, notas, estado)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'confirmada')`,
+        [telefono, nombre, emailFinal, fecha, hora, tipoConsulta || 'Consulta', notas || '']
       );
     }
     console.log('✅ [apiAgendar] Cita', estado, 'para:', telefono, fecha, hora);
