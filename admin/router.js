@@ -12,6 +12,8 @@ const {
   getConversacionesRecientes, getMensajesDeContacto,
 } = require('../services/postgres');
 
+const { pool } = require('../services/agenda');
+
 // ── Servir panel HTML ─────────────────────────────────────
 router.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -84,7 +86,39 @@ router.get('/api/conversaciones/:telefono', async (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-// ═══════════════════════════════════════
+// ══════════════════════════════════════════════════════════
+// CITAS
+// ══════════════════════════════════════════════════════════
+router.get('/api/citas', async (req, res) => {
+  try {
+    const { estado, fecha } = req.query;
+    let query = `SELECT * FROM wa_citas`;
+    const params = [];
+    const conds = [];
+    if (estado) { params.push(estado); conds.push(`estado = $${params.length}`); }
+    if (fecha)  { params.push(fecha);  conds.push(`fecha_cita = $${params.length}`); }
+    if (conds.length) query += ' WHERE ' + conds.join(' AND ');
+    query += ' ORDER BY fecha_cita ASC, hora_cita ASC';
+    const result = await pool.query(query, params);
+    res.json({ ok: true, citas: result.rows });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+router.patch('/api/citas/:id/estado', async (req, res) => {
+  try {
+    const { estado } = req.body;
+    const estados = ['confirmada', 'pendiente', 'cancelada', 'completada'];
+    if (!estados.includes(estado))
+      return res.status(400).json({ ok: false, error: 'Estado inválido' });
+    await pool.query(
+      `UPDATE wa_citas SET estado = $1, actualizado_en = NOW() WHERE id = $2`,
+      [estado, req.params.id]
+    );
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ══════════════════════════════════════════════════════════
 // APRENDIZAJE DEL BOT
 // ═══════════════════════════════════════
 router.get('/aprender', (req, res) => {

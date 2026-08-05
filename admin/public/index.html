@@ -21,7 +21,11 @@
         .btn:hover { opacity: 0.9; }
         input, textarea { width: 100%; padding: 8px; margin: 5px 0; border: 1px solid #ddd; border-radius: 4px; }
         .form-group { margin-bottom: 10px; }
-        .status { padding: 5px 10px; border-radius: 15px; font-size: 12px; }
+        .badge { padding:3px 10px; border-radius:12px; font-size:12px; font-weight:600; }
+        .badge-confirmada { background:#d4edda; color:#155724; }
+        .badge-pendiente  { background:#fff3cd; color:#856404; }
+        .badge-cancelada  { background:#f8d7da; color:#721c24; }
+        .badge-completada { background:#cce5ff; color:#004085; }
         .online { background: #d4edda; color: #155724; }
     </style>
 </head>
@@ -57,6 +61,33 @@
                     <tr><th>Categoría</th><th>Pregunta</th><th>Respuesta</th><th>Acciones</th></tr>
                 </thead>
                 <tbody id="body-kb"><tr><td colspan="4">Cargando...</td></tr></tbody>
+            </table>
+        </div>
+
+        <!-- Citas Agendadas -->
+        <div class="section">
+            <h2>📅 Citas Agendadas</h2>
+            <div style="margin-bottom:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                <select id="filtro-estado" onchange="cargarCitas()" style="padding:7px 12px;border:1px solid #ddd;border-radius:4px;">
+                    <option value="">Todos los estados</option>
+                    <option value="confirmada">✅ Confirmada</option>
+                    <option value="pendiente">⏳ Pendiente</option>
+                    <option value="cancelada">❌ Cancelada</option>
+                    <option value="completada">✔️ Completada</option>
+                </select>
+                <input type="date" id="filtro-fecha" onchange="cargarCitas()" style="padding:7px 12px;border:1px solid #ddd;border-radius:4px;">
+                <button class="btn btn-primary" onclick="cargarCitas()">🔄 Actualizar</button>
+                <span id="total-citas" style="font-size:13px;color:#666;"></span>
+            </div>
+            <table id="tabla-citas">
+                <thead>
+                    <tr>
+                        <th>#</th><th>Paciente</th><th>Teléfono</th>
+                        <th>Fecha</th><th>Hora</th><th>Tratamiento</th>
+                        <th>Estado</th><th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="body-citas"><tr><td colspan="8">Cargando...</td></tr></tbody>
             </table>
         </div>
 
@@ -157,10 +188,70 @@
             }
         }
 
+        // ── CITAS ─────────────────────────────────────────────
+        async function cargarCitas() {
+            const estado = document.getElementById('filtro-estado').value;
+            const fecha  = document.getElementById('filtro-fecha').value;
+            let url = '/admin/api/citas?';
+            if (estado) url += 'estado=' + estado + '&';
+            if (fecha)  url += 'fecha='  + fecha  + '&';
+
+            const res  = await fetch(url);
+            const data = await res.json();
+            const tbody = document.getElementById('body-citas');
+            const total = document.getElementById('total-citas');
+
+            if (!data.ok) {
+                tbody.innerHTML = '<tr><td colspan="8">Error: ' + data.error + '</td></tr>';
+                return;
+            }
+            if (!data.citas.length) {
+                tbody.innerHTML = '<tr><td colspan="8">No hay citas con esos filtros</td></tr>';
+                total.textContent = '';
+                return;
+            }
+            total.textContent = data.citas.length + ' cita(s)';
+            tbody.innerHTML = data.citas.map(c => {
+                const fecha = new Date(c.fecha_cita).toLocaleDateString('es-CO', { weekday:'short', day:'2-digit', month:'short', year:'numeric', timeZone:'UTC' });
+                const hora  = c.hora_cita ? c.hora_cita.slice(0,5) : '-';
+                const badge = `<span class="badge badge-${c.estado}">${c.estado}</span>`;
+                return `<tr>
+                    <td>${c.id}</td>
+                    <td>${c.nombre_paciente || '-'}</td>
+                    <td>${c.telefono}</td>
+                    <td>${fecha}</td>
+                    <td>${hora}</td>
+                    <td>${c.tratamiento || '-'}</td>
+                    <td>${badge}</td>
+                    <td>
+                        <select onchange="cambiarEstadoCita(${c.id}, this.value)" style="padding:4px 8px;border-radius:4px;border:1px solid #ddd;font-size:12px;">
+                            <option value="">Cambiar…</option>
+                            <option value="confirmada">✅ Confirmada</option>
+                            <option value="completada">✔️ Completada</option>
+                            <option value="cancelada">❌ Cancelada</option>
+                        </select>
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+
+        async function cambiarEstadoCita(id, estado) {
+            if (!estado) return;
+            const res  = await fetch('/admin/api/citas/' + id + '/estado', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ estado })
+            });
+            const data = await res.json();
+            if (data.ok) cargarCitas();
+            else alert('Error: ' + data.error);
+        }
+
         // Cargar todo al iniciar
         cargarContactos();
         cargarKB();
         cargarConversaciones();
+        cargarCitas();
     </script>
 </body>
 </html>

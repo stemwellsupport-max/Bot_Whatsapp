@@ -8,6 +8,7 @@ const QRCode = require('qrcode');
 const { handleIncomingMessage } = require('./commands/handlers');
 const { initDB } = require('./services/postgres');
 const { initDB: initAgendaDB } = require('./services/agenda');
+const adminRouter = require('./admin/router');
 
 const app = express();
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
@@ -27,6 +28,7 @@ process.on('unhandledRejection', (reason) => {
 // Middlewares
 app.use(express.json({ limit: '5mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/admin', adminRouter);
 
 // ============================================
 // RUTA: FORMULARIO DE CONSENTIMIENTO
