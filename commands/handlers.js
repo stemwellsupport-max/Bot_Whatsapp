@@ -225,8 +225,15 @@ async function handleIncomingMessage(message, contact) {
   const tipo = message.type;
   let texto = '';
 
-  if (tipo === 'text') texto = message.text?.body || '';
-  else if (tipo === 'interactive') texto = message.interactive?.button_reply?.title || '';
+  if (tipo === 'text') {
+    texto = message.text?.body || '';
+  } else if (tipo === 'interactive') {
+    // Botones normales → button_reply; Listas interactivas → list_reply
+    texto = message.interactive?.button_reply?.title
+         || message.interactive?.list_reply?.title
+         || message.interactive?.list_reply?.id
+         || '';
+  }
 
   if (!texto || texto.length < 2) return;
 
