@@ -7,10 +7,22 @@ const PDFDocument = require('pdfkit');
 const QRCode = require('qrcode');
 const { handleIncomingMessage } = require('./commands/handlers');
 const { initDB } = require('./services/postgres');
+const { initDB: initAgendaDB } = require('./services/agenda');
 
 const app = express();
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 const PORT = process.env.PORT || 3000;
+
+// ============================================
+// CAPTURA DE ERRORES GLOBALES (evita que el
+// bot se detenga por errores de red o no capturados)
+// ============================================
+process.on('uncaughtException', (err) => {
+  console.error('🛡️ [uncaughtException] Capturado (el bot continúa):', err.message);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('🛡️ [unhandledRejection] Capturado (el bot continúa):', reason?.message || reason);
+});
 
 // Middlewares
 app.use(express.json({ limit: '5mb' }));
@@ -359,8 +371,10 @@ app.post('/webhook', (req, res) => {
     const message = body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
     const contact = body.entry?.[0]?.changes?.[0]?.value?.contacts?.[0];
     
-    if (message && contact) {
-      handleIncomingMessage(message, contact);
+        if (message && contact) {
+      handleIncomingMessage(message, contact).catch((err) => {
+        console.error('❌ Error procesando mensaje:', err?.message || err);
+      });
     }
   }
   res.sendStatus(200);
@@ -377,6 +391,7 @@ app.get('/', (req, res) => {
 async function start() {
   try {
     await initDB();
+    await initAgendaDB();
     app.listen(PORT, () => {
       console.log(`🚀 Stemwell Bot corriendo en puerto ${PORT}`);
       console.log(`📡 Webhook: http://localhost:${PORT}/webhook`);

@@ -59,7 +59,7 @@ async function initDB() {
       );
     `);
 
-    // 🆕 TABLA DE CONOCIMIENTO APRENDIDO POR IA
+    // ­ƒåò TABLA DE CONOCIMIENTO APRENDIDO POR IA
     await client.query(`
       CREATE TABLE IF NOT EXISTS ia_conocimiento (
         id                  SERIAL PRIMARY KEY,
@@ -76,7 +76,7 @@ async function initDB() {
       );
     `);
 
-    // Índices para búsqueda rápida
+    // ├ìndices para b├║squeda r├ípida
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_pregunta_normalizada 
       ON ia_conocimiento(pregunta_normalizada);
@@ -92,15 +92,15 @@ async function initDB() {
       ON ia_conocimiento(confianza DESC, veces_usada DESC);
     `);
 
-    console.log('✅ Tablas PostgreSQL verificadas/creadas');
+    console.log('Ô£à Tablas PostgreSQL verificadas/creadas');
   } finally {
     client.release();
   }
 }
 
-// ── CONTACTOS ─────────────────────────────────────────────
+// ÔöÇÔöÇ CONTACTOS ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 async function saveContacto({ nombre, apellido, email, telefono }) {
-  console.log(`💾 [saveContacto] Intentando guardar: ${telefono} | ${nombre} | ${email}`);
+  console.log(`­ƒÆ¥ [saveContacto] Intentando guardar: ${telefono} | ${nombre} | ${email}`);
   try {
     await pool.query(
       `INSERT INTO wa_contactos (telefono, nombre, apellido, email, ultimo_msg)
@@ -113,10 +113,10 @@ async function saveContacto({ nombre, apellido, email, telefono }) {
       [telefono, nombre||'', apellido||'', email||'']
     );
     const result = await pool.query('SELECT * FROM wa_contactos WHERE telefono=$1',[telefono]);
-    console.log('✅ [saveContacto] Registro actualizado:', result.rows[0]);
+    console.log('Ô£à [saveContacto] Registro actualizado:', result.rows[0]);
     return result.rows[0];
   } catch (err) {
-    console.error('❌ [saveContacto] Error:', err.message);
+    console.error('ÔØî [saveContacto] Error:', err.message);
     throw err;
   }
 }
@@ -160,9 +160,9 @@ async function updateLeadData(telefono, data) {
   ).catch(() => {});
 }
 
-// ── BASE DE CONOCIMIENTO (KB) ──────────────────────────────────
+// ÔöÇÔöÇ BASE DE CONOCIMIENTO (KB) ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 async function buscarEnKB(texto) {
-  const limpio   = texto.replace(/[^a-záéíóúüñA-ZÁÉÍÓÚÜÑ0-9 ]/g,' ').trim();
+  const limpio   = texto.replace(/[^a-z├í├®├¡├│├║├╝├▒A-Z├ü├ë├ì├ô├Ü├£├æ0-9 ]/g,' ').trim();
   const palabras = limpio.split(' ').filter(p => p.length > 2);
   if (!palabras.length) return [];
   const conds  = palabras.map((_,i)=>
@@ -208,7 +208,7 @@ async function deleteArticuloKB(id) {
   await pool.query('UPDATE kb_articulos SET activo=0 WHERE id=$1',[id]);
 }
 
-// ── CONVERSACIONES ────────────────────────────────────────
+// ÔöÇÔöÇ CONVERSACIONES ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 async function logMensaje(telefono, nombre, direccion, mensaje) {
   try {
     await pool.query(
@@ -241,9 +241,9 @@ async function getMensajesDeContacto(telefono, limite=100) {
   return r.rows;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 🆕 FUNCIONES DE HISTORIAL PARA IA
-// ═══════════════════════════════════════════════════════════════════════════
+// ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ
+// ­ƒåò FUNCIONES DE HISTORIAL PARA IA
+// ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ
 async function getHistorialMensajes(telefono, limite = 10) {
   try {
     const result = await pool.query(
@@ -256,7 +256,7 @@ async function getHistorialMensajes(telefono, limite = 10) {
     );
     return result.rows.reverse();
   } catch (error) {
-    console.error('❌ [getHistorialMensajes] Error:', error.message);
+    console.error('ÔØî [getHistorialMensajes] Error:', error.message);
     return [];
   }
 }
@@ -269,16 +269,16 @@ async function getHistorialRAG(telefono, limite = 10) {
   return getHistorialMensajes(telefono, limite);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 🧠 FUNCIONES DE APRENDIZAJE AUTOMÁTICO
-// ═══════════════════════════════════════════════════════════════════════════
+// ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ
+// ­ƒºá FUNCIONES DE APRENDIZAJE AUTOM├üTICO
+// ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ
 
-// Normalizar pregunta para búsqueda
+// Normalizar pregunta para b├║squeda
 function normalizarPregunta(pregunta) {
   return pregunta
     .toLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    .replace(/[¿?¡!.,;:()\[\]{}]/g, '')
+    .replace(/[┬┐?┬í!.,;:()\[\]{}]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -350,7 +350,7 @@ async function guardarConocimiento(pregunta, respuesta, idioma, confianza = 0.7)
     [pregunta, preguntaNorm, respuesta, idioma, confianza]
   );
   
-  console.log(`📚 [Aprendizaje] Nueva pregunta guardada: "${pregunta.substring(0, 50)}..."`);
+  console.log(`­ƒôÜ [Aprendizaje] Nueva pregunta guardada: "${pregunta.substring(0, 50)}..."`);
   return result.rows[0].id;
 }
 
@@ -364,7 +364,7 @@ async function aumentarConfianza(id) {
   );
 }
 
-// Obtener estadísticas de aprendizaje
+// Obtener estad├¡sticas de aprendizaje
 async function getEstadisticasAprendizaje() {
   const result = await pool.query(`
     SELECT 
@@ -398,17 +398,17 @@ async function eliminarConocimiento(id) {
     `UPDATE ia_conocimiento SET activo = FALSE WHERE id = $1`,
     [id]
   );
-  console.log(`🗑️ [Aprendizaje] Conocimiento ID ${id} desactivado`);
+  console.log(`­ƒùæ´©Å [Aprendizaje] Conocimiento ID ${id} desactivado`);
 }
 
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 🔍 OBTENER ÚLTIMO CONTEXTO DEL USUARIO
-// (Para saber qué preguntaba cuando responde encuesta)
-// ═══════════════════════════════════════════════════════════════════════════
+// ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ
+// ­ƒöì OBTENER ├ÜLTIMO CONTEXTO DEL USUARIO
+// (Para saber qu├® preguntaba cuando responde encuesta)
+// ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ
 async function getUltimoContexto(telefono) {
   try {
-    // Buscar la última pregunta que hizo este usuario
+    // Buscar la ├║ltima pregunta que hizo este usuario
     const result = await pool.query(`
       SELECT mensaje as pregunta, fecha
       FROM wa_conversaciones
@@ -427,15 +427,15 @@ async function getUltimoContexto(telefono) {
     
     return null;
   } catch (error) {
-    console.error('❌ [getUltimoContexto] Error:', error.message);
+    console.error('ÔØî [getUltimoContexto] Error:', error.message);
     return null;
   }
 }
-// ═══════════════════════════════════════════════════════════════════════════
-// 📤 EXPORTAR TODO
-// ═══════════════════════════════════════════════════════════════════════════
+// ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ
+// ­ƒôñ EXPORTAR TODO
+// ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ
 module.exports = {
-  // Inicialización
+  // Inicializaci├│n
   initDB, pool,
   
   // Contactos
@@ -463,7 +463,7 @@ module.exports = {
   guardarMensajeRAG,
   getHistorialRAG,
   
-  // 🧠 APRENDIZAJE AUTOMÁTICO
+  // ­ƒºá APRENDIZAJE AUTOM├üTICO
   normalizarPregunta,
   buscarEnConocimiento,
   guardarConocimiento,
@@ -472,6 +472,6 @@ module.exports = {
   listarConocimiento,
   eliminarConocimiento,
   
-  // 🆕 CONTEXTO DE USUARIO
+  // ­ƒåò CONTEXTO DE USUARIO
   getUltimoContexto,
 };

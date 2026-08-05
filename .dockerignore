@@ -1,0 +1,12 @@
+node_modules
+.env
+.env.local
+.git
+.gitignore
+cloudflared-amd64.pkg
+console.error(e.message))
+node
+pdfs/*
+public/consentimientos/*
+POLÍTICA*
+*.log

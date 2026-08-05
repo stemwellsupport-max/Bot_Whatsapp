@@ -1,0 +1,76 @@
+# ============================================================
+# docker-compose.yml del Bot WhatsApp Stemwell
+#
+# Comparte la MISMA base de datos PostgreSQL que el CRM
+# (que corre en el host en host.docker.internal:5432), pero usa
+# sus propias tablas (wa_*, ia_*, kb_*).
+#
+# El bot se une a la red del CRM (crm_api_default) para poder
+# hablar con la API del CRM por el nombre de servicio 'api:8001'
+# en caso de agendamiento por HTTP (Fase 2).
+#
+# Exposición externa del bot por su túnel ngrok dedicado:
+#   https://stemwell.bot.com.ngrok.dev
+# ============================================================
+
+# Red del CRM (bridge) donde vive 'api'. Definida en C:\Users\PC\crm_api\docker-compose.yml
+# (nginx config: external)
+# networks:
+#   crm_api_default:
+#     external: true
+
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: whatsapp-bot
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      # PostgreSQL compartido (corre en el host de Windows, igual que el CRM)
+      PG_HOST: host.docker.internal
+      PG_PORT: "5432"
+      # API del CRM por el nombre de servicio dentro de su red Docker
+      CRM_API_URL: http://api:8001
+      PORT: "3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - crm_api_default
+    volumes:
+      - ./public/consentimientos:/app/public/consentimientos
+      - ./pdfs:/app/pdfs
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ngrok para exponer el bot al webhook de WhatsApp, túnel dedicado.
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: bot-ngrok
+    restart: unless-stopped
+    command:
+      - http
+      - --config=/etc/ngrok.yml
+      - --url=${NGROK_URL:-stemwell.bot.com.ngrok.dev}
+      - bot:3000
+    volumes:
+      - C:/Users/PC/AppData/Local/ngrok/ngrok.yml:/etc/ngrok.yml:ro
+    networks:
+      - default
+    depends_on:
+      - bot
+
+networks:
+  default:
+  crm_api_default:
+    external: true
+

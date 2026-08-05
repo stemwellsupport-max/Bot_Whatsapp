@@ -1,5 +1,6 @@
 // services/ia-local.js - VERSIÓN FINAL CON ENCUESTA Y LISTA DE SERVICIOS
 const { buscarEnConocimiento, guardarConocimiento } = require('./postgres');
+const { responderDeepSeek } = require('./deepseek');
 
 const AGENDA_URL = process.env.AGENDA_URL || 'https://ff.healthatom.io/ETDnHN';
 const LM_STUDIO_URL = 'http://localhost:1234/v1/chat/completions';
@@ -156,21 +157,42 @@ async function responderConIA(mensajeUsuario, nombreUsuario, telefono, idiomaFor
     return getListaServicios(idioma);
   }
 
-  // ═══ LM STUDIO ═══
-  try {
-    var respuesta = await responderConLMStudio(mensajeUsuario, idioma);
-    console.log('\u2705 LM Studio OK');
-    try { await guardarConocimiento(mensajeUsuario, respuesta, idioma, 0.7); } catch (e) {}
-    if (sendMessageFn) iniciarTimerEncuesta(telefono, idioma, sendMessageFn);
-    return respuesta;
-  } catch (e) {
-    console.log('\u26a0 LM Studio fall\u00f3');
-    var fallback = (idioma === 'en')
-      ? '\u00a0 Thank you for contacting Stemwell.\n\n Kr 13 #118-08, Bogot\u00e1\n +57 310 406 8755\n Book: ' + AGENDA_URL
-      : '\u00a0 Gracias por contactar a Stemwell.\n\n Kr 13 #118-08, Bogot\u00e1\n +57 310 406 8755\n Agenda: ' + AGENDA_URL;
-    if (sendMessageFn) iniciarTimerEncuesta(telefono, idioma, sendMessageFn);
-    return fallback;
+  // ═══ IA NUBE (DEEPSEEK) PRINCIPAL si hay API key ═══
+  if (process.env.DEEPSEEK_API_KEY) {
+    try {
+      var respDeep = await responderDeepSeek(mensajeUsuario, idioma);
+      console.log('\u2705 DeepSeek OK');
+      try { await guardarConocimiento(mensajeUsuario, respDeep, idioma, 0.7); } catch (e) {}
+      if (sendMessageFn) iniciarTimerEncuesta(telefono, idioma, sendMessageFn);
+      return respDeep;
+    } catch (eD) {
+      console.log('\u26a0 DeepSeek fall\u00f3');
+      // Si DeepSeek falla, intentar LM Studio local
+      try {
+        var respLM2 = await responderConLMStudio(mensajeUsuario, idioma);
+        console.log('\u2705 LM Studio (fallback) OK');
+        try { await guardarConocimiento(mensajeUsuario, respLM2, idioma, 0.7); } catch (e3) {}
+        if (sendMessageFn) iniciarTimerEncuesta(telefono, idioma, sendMessageFn);
+        return respLM2;
+      } catch (e4) {}
+    }
   }
+  // ═══ SIN API key de nube: usar LM Studio local ═══
+  try {
+    var respLM = await responderConLMStudio(mensajeUsuario, idioma);
+    console.log('\u2705 LM Studio OK');
+    try { await guardarConocimiento(mensajeUsuario, respLM, idioma, 0.7); } catch (e5) {}
+    if (sendMessageFn) iniciarTimerEncuesta(telefono, idioma, sendMessageFn);
+    return respLM;
+  } catch (e6) {
+    console.log('\u26a0 LM Studio fall\u00f3 (sin API key externa)');
+  }
+  // Último recurso: respuesta genérica de contacto
+  var fallback = (idioma === 'en')
+    ? '\u00a0 Thank you for contacting Stemwell.\n\n Kr 13 #118-08, Bogot\u00e1\n +57 310 406 8755\n Book: ' + AGENDA_URL
+    : '\u00a0 Gracias por contactar a Stemwell.\n\n Kr 13 #118-08, Bogot\u00e1\n +57 310 406 8755\n Agenda: ' + AGENDA_URL;
+  if (sendMessageFn) iniciarTimerEncuesta(telefono, idioma, sendMessageFn);
+  return fallback;
 }
 
 module.exports = { responderConIA: responderConIA, detectarIdioma: detectarIdioma };

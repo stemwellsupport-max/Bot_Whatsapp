@@ -1,8 +1,10 @@
 const express = require('express');
 const path    = require('path');
 const router  = express.Router();
-const { getEstadisticas, getPreguntasSinResponder, getTodasRespuestas, guardarRespuesta } = require('../rag/ml-engine');
-
+const {
+  getEstadisticas, getPreguntasSinResponder,
+  getTodasRespuestas, guardarRespuesta,
+} = require('../services/aprendizaje');
 
 const {
   getAllArticulos, saveArticuloKB, updateArticuloKB, deleteArticuloKB,

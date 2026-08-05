@@ -2,7 +2,7 @@
 // STEMWELL - GESTOR DE SESIONES CONVERSACIONALES
 // ══════════════════════════════════════════════════════════
 
-const sesiones = {};
+const { obtenerEstado, guardarEstado, borrarEstado } = require('./agenda');
 
 const SESION_DEFAULT = {
   paso:               'inicio',
@@ -23,19 +23,20 @@ const SESION_DEFAULT = {
   esperando:          null,   // 'nombre' | 'email' | 'motivo' | 'datos_lead'
 };
 
-function getSesion(telefono) {
-  if (!sesiones[telefono]) {
-    sesiones[telefono] = { ...SESION_DEFAULT };
-  }
-  return sesiones[telefono];
+async function getSesion(telefono) {
+  const guardada = await obtenerEstado(telefono, 'sesion');
+  if (guardada) return { ...SESION_DEFAULT, ...guardada };
+  return { ...SESION_DEFAULT };
 }
 
-function setSesion(telefono, data) {
-  sesiones[telefono] = { ...getSesion(telefono), ...data };
+async function setSesion(telefono, data) {
+  const actual = await getSesion(telefono);
+  const nueva = { ...actual, ...data };
+  await guardarEstado(telefono, nueva, 'sesion');
 }
 
-function resetSesion(telefono) {
-  sesiones[telefono] = { ...SESION_DEFAULT };
+async function resetSesion(telefono) {
+  await borrarEstado(telefono, 'sesion');
 }
 
 module.exports = { getSesion, setSesion, resetSesion };
