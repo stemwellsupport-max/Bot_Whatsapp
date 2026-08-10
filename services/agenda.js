@@ -135,35 +135,6 @@ async function initDB() {
         ADD COLUMN IF NOT EXISTS notas TEXT DEFAULT '';
     `).catch(() => {});
 
-    // 🆕 TABLA DE CITAS
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS wa_citas (
-        id                   SERIAL PRIMARY KEY,
-        telefono             VARCHAR(30) NOT NULL,
-        nombre_paciente      VARCHAR(150) DEFAULT '',
-        email                VARCHAR(255) DEFAULT '',
-        fecha_cita           DATE NOT NULL,
-        hora_cita            TIME NOT NULL,
-        tratamiento          VARCHAR(200) DEFAULT '',
-        descripcion          TEXT DEFAULT '',
-        estado               VARCHAR(30) DEFAULT 'confirmada',
-        notas                TEXT DEFAULT '',
-        recordatorio_enviado BOOLEAN DEFAULT FALSE,
-        creado_en            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        actualizado_en       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_citas_telefono ON wa_citas(telefono);
-    `).catch(() => {});
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_citas_fecha ON wa_citas(fecha_cita);
-    `).catch(() => {});
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_citas_estado ON wa_citas(estado);
-    `).catch(() => {});
-
     console.log('✅ Tablas PostgreSQL verificadas/creadas');
   } finally {
     client.release();
@@ -575,23 +546,57 @@ async function resetEstadoAgenda(telefono) {
   return await borrarEstado(telefono, 'agenda');
 }
 
-// Horarios disponibles: genera slots 8:00-17:00 cada 45 min y excluye ocupados
-async function getDisponibilidad({ fecha }) {
+const TERMINAL_CITA_ESTADOS = [
+  'anulado',
+  'cancelado',
+  'canceled',
+  'no show',
+  'no asiste',
+  'reagendado',
+  'cambio de fecha',
+  'completada',
+  'completado',
+  'atendido',
+];
+
+function normalizarTelefono(telefono) {
+  return String(telefono || '').replace(/[^\d]/g, '');
+}
+
+function horaParaBD(hora) {
+  const h = String(hora || '').trim();
+  if (!h) return h;
+  return h.length === 5 ? h + ':00' : h;
+}
+
+function fechaParaBD(fecha) {
+  if (!fecha) return '';
+  if (fecha instanceof Date) return fecha.toISOString().slice(0, 10);
+  const s = String(fecha).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  return s.slice(0, 10);
+}
+
+async function getDisponibilidad({ fecha, doctorNombre = '' }) {
   try {
-    const fechaStr = new Date(fecha).toISOString().slice(0, 10);
+    const fechaStr = fechaParaBD(fecha);
     const result = await pool.query(
-      `SELECT hora_cita FROM wa_citas 
-       WHERE fecha_cita = $1 AND estado NOT IN ('cancelada', 'completada')`,
-      [fechaStr]
+      `SELECT hora_inicio
+       FROM citas
+       WHERE fecha_cita = $1::date
+         AND LOWER(COALESCE(estado_cita, '')) <> ALL($2::text[])
+         AND ($3 = '' OR LOWER(TRIM(CONCAT_WS(' ', nombre_profesional, apellidos_profesional))) = LOWER(TRIM($3)))`,
+      [fechaStr, TERMINAL_CITA_ESTADOS, doctorNombre || '']
     );
-    const ocupadas = new Set(result.rows.map(r => r.hora_cita?.slice(0, 5)));
+    const ocupadas = new Set(result.rows.map(r => String(r.hora_inicio || '').slice(0, 5)));
 
     const todos = [];
     for (let h = 8; h < 18; h++) {
       for (const m of [0, 45]) {
         if (h === 17 && m === 45) continue;
-        const hora = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-        todos.push(hora);
+        todos.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
       }
     }
     const libres = todos.filter(h => !ocupadas.has(h));
@@ -602,21 +607,66 @@ async function getDisponibilidad({ fecha }) {
   }
 }
 
-// Crear lead en wa_contactos y devuelve el id
+async function buscarLeadPorTelefonoEmail({ telefono, email }) {
+  const params = [];
+  const where = [];
+  if (telefono) {
+    params.push(`%${normalizarTelefono(telefono)}`);
+    where.push(`regexp_replace(coalesce(telefono,''),'[^0-9]','','g') LIKE $${params.length}`);
+  }
+  if (email && /@/.test(email)) {
+    params.push(email.trim());
+    where.push(`lower(email) = lower($${params.length})`);
+  }
+  if (!where.length) return null;
+  const result = await pool.query(
+    `SELECT id, nombre, telefono, email, doctor_id
+     FROM leads
+     WHERE ${where.join(' OR ')}
+     ORDER BY fecha_actualizacion DESC NULLS LAST
+     LIMIT 1`,
+    params
+  );
+  return result.rows[0] || null;
+}
+
 async function apiCrearLead({ nombre, telefono, email, canal = 'WhatsApp', notas = '' }) {
   try {
+    const existente = await buscarLeadPorTelefonoEmail({ telefono, email });
+    if (existente) {
+      const updated = await pool.query(
+        `UPDATE leads
+         SET nombre = COALESCE(NULLIF($1, ''), nombre),
+             email = CASE WHEN $2 <> '' THEN $2 ELSE email END,
+             canal = COALESCE(NULLIF($3, ''), canal),
+             notas = COALESCE(NULLIF($4, ''), notas),
+             fecha_actualizacion = CURRENT_TIMESTAMP
+         WHERE id = $5
+         RETURNING id`,
+        [nombre || '', email || '', canal || 'WhatsApp', notas || '', existente.id]
+      );
+      const id = updated.rows[0]?.id;
+      console.log('✅ [apiCrearLead] Lead actualizado id:', id);
+      return id;
+    }
+
     const result = await pool.query(
-      `INSERT INTO wa_contactos (nombre, telefono, email, canal, notas, creado_en)
-       VALUES ($1, $2, $3, $4, $5, NOW())
-       ON CONFLICT (telefono) DO UPDATE 
-         SET nombre = EXCLUDED.nombre,
-             email  = COALESCE(EXCLUDED.email, wa_contactos.email),
-             notas  = EXCLUDED.notas
+      `INSERT INTO leads (
+         nombre, telefono, email, categoria, canal, genero, ciudad, pais, notas,
+         metodo_contacto, horario_preferido, sales_status, asesor_id, doctor_id,
+         creado_por, pipeline, last_contact_date, admission_date, favorito,
+         program_to_which_belong_it_is
+       ) VALUES (
+         $1, $2, $3, '', $4, '', '', '', $5,
+         '', '', 'New Lead', NULL, NULL,
+         'bot', '', CURRENT_DATE, CURRENT_DATE, FALSE,
+         ''
+       )
        RETURNING id`,
-      [nombre, telefono, email || '', canal, notas]
+      [nombre || '', telefono || '', email || '', canal || 'WhatsApp', notas || '']
     );
     const id = result.rows[0]?.id;
-    console.log('✅ [apiCrearLead] Lead creado/actualizado id:', id);
+    console.log('✅ [apiCrearLead] Lead creado id:', id);
     return id;
   } catch (e) {
     console.error('❌ [apiCrearLead] Error:', e.message);
@@ -624,70 +674,133 @@ async function apiCrearLead({ nombre, telefono, email, canal = 'WhatsApp', notas
   }
 }
 
-// Agendar / reagendar / cancelar una cita en wa_citas
+async function actualizarLeadEstado({ leadId, doctorId, fecha, estado, tipoConsulta = '' }) {
+  const fechaCita = fechaParaBD(fecha);
+  const appointmentStatus = estado === 'Canceled' ? 'Canceled' : (estado === 'Rescheduled' ? 'Rescheduled' : 'Scheduled');
+  const isConsulting = String(tipoConsulta).toLowerCase().includes('consultoria');
+  const salesStatus = estado === 'Canceled' ? 'Cancelled Appointment' : (isConsulting ? 'Consultor\u00eda Agendada' : 'Scheduled Appointment');
+  const medicalStatus = (estado === 'Canceled' || isConsulting) ? null : 'Pending Evaluation';
+  await pool.query(
+    `UPDATE leads
+     SET sales_status = $1,
+         appointment_status = $2,
+         medical_status = $3,
+         cita_confirmada = FALSE,
+         doctor_id = COALESCE($4, doctor_id),
+         treatment_date = COALESCE($5::date, treatment_date),
+         fecha_actualizacion = CURRENT_TIMESTAMP
+     WHERE id = $6`,
+    [salesStatus, appointmentStatus, medicalStatus, doctorId || null, fechaCita || null, leadId]
+  );
+}
+
 async function apiAgendar({ leadId, estado, fecha, hora, doctorId, tipoConsulta, notas, email }) {
   try {
-    // Si es cancelación actualizamos el estado
+    const leadResult = await pool.query(
+      `SELECT id, nombre, telefono, email, medilink_numero, tipo_consulta, program_to_which_belong_it_is, doctor_id
+       FROM leads
+       WHERE id = $1`,
+      [leadId]
+    );
+    if (!leadResult.rows.length) throw new Error('Lead no encontrado: ' + leadId);
+
+    const lead = leadResult.rows[0];
+    const fechaStr = fechaParaBD(fecha);
+    const horaStr = horaParaBD(hora);
+    const tipoFinal = tipoConsulta || lead.tipo_consulta || 'Consulta gratuita';
+    const doctorFinal = doctorId || lead.doctor_id || null;
+    const doctorNombre = doctorFinal
+      ? (await pool.query('SELECT nombre FROM usuarios WHERE id = $1', [doctorFinal]).catch(() => ({ rows: [] }))).rows[0]?.nombre || ''
+      : '';
+
     if (estado === 'Canceled') {
-      // Intentar cancelar por leadId en wa_contactos; si no, por teléfono directamente
-      const ct = await pool.query(
-        `SELECT telefono FROM wa_contactos WHERE id = $1`, [leadId]
-      ).catch(() => ({ rows: [] }));
-      if (ct.rows.length) {
-        await pool.query(
-          `UPDATE wa_citas SET estado = 'cancelada', actualizado_en = NOW()
-           WHERE telefono = $1 AND estado IN ('confirmada', 'pendiente')`,
-          [ct.rows[0].telefono]
-        );
-      }
-      console.log('✅ [apiAgendar] Cita cancelada para lead:', leadId);
-      return;
-    }
-
-    // Para reagendar actualizamos; para agendar insertamos
-    // Buscar contacto en wa_contactos. Si no existe (es lead del CRM), usamos el leadId directamente.
-    let contacto = await pool.query(
-      `SELECT telefono, nombre, email FROM wa_contactos WHERE id = $1`, [leadId]
-    ).catch(() => ({ rows: [] }));
-
-    // Si no encontró en wa_contactos, buscar en leads (CRM)
-    if (!contacto.rows.length) {
-      contacto = await pool.query(
-        `SELECT telefono, nombre, email FROM leads WHERE id = $1`, [leadId]
-      ).catch(() => ({ rows: [] }));
-    }
-
-    if (!contacto.rows.length) throw new Error('Contacto no encontrado para leadId: ' + leadId);
-
-    const { telefono, nombre } = contacto.rows[0];
-    const emailFinal = email || contacto.rows[0].email || '';
-    const esReagenda = estado === 'Rescheduled';
-
-    if (esReagenda) {
-      // Intentar actualizar cita existente; si no hay, insertar una nueva
-      const updated = await pool.query(
-        `UPDATE wa_citas SET fecha_cita = $1, hora_cita = $2, estado = 'confirmada',
-           notas = $3, actualizado_en = NOW()
-         WHERE telefono = $4 AND estado IN ('confirmada', 'pendiente')
+      const cancelled = await pool.query(
+        `WITH target AS (
+           SELECT id
+           FROM citas
+           WHERE lead_id = $1
+           ORDER BY fecha_cita DESC, hora_inicio DESC, id DESC
+           LIMIT 1
+         )
+         UPDATE citas
+         SET estado_cita = 'Anulado',
+             status_changed_at = NOW(),
+             updated_at = NOW()
+         WHERE id IN (SELECT id FROM target)
          RETURNING id`,
-        [fecha, hora, notas || '', telefono]
+        [leadId]
       );
-      if (!updated.rows.length) {
-        // No había cita previa en wa_citas, insertar nueva
-        await pool.query(
-          `INSERT INTO wa_citas (telefono, nombre_paciente, email, fecha_cita, hora_cita, tratamiento, notas, estado)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, 'confirmada')`,
-          [telefono, nombre, emailFinal, fecha, hora, tipoConsulta || 'Consulta', notas || '']
-        );
-      }
-    } else {
+      await actualizarLeadEstado({ leadId, doctorId: doctorFinal, fecha, estado });
+      console.log('✅ [apiAgendar] Cita cancelada para lead:', leadId);
+      return cancelled.rows[0] || null;
+    }
+
+    const prev = await pool.query(
+      `SELECT id, appointment_root_id
+       FROM citas
+       WHERE lead_id = $1
+       ORDER BY fecha_cita DESC, hora_inicio DESC, id DESC
+       LIMIT 1`,
+      [leadId]
+    );
+    const prevId = prev.rows[0]?.id || null;
+    const rootId = prev.rows[0]?.appointment_root_id || prevId || null;
+
+    const inserted = await pool.query(
+      `INSERT INTO citas (
+         lead_id, estado_cita, fecha_cita, hora_inicio, comentario_cita,
+         nro_paciente, nombre_paciente, tipo_atencion, nombre_profesional,
+         origen, agendado_por, fecha_creacion_cita, program_to_which_belong_it_is,
+         consulta_medilink, consulta_pagada, appointment_kind,
+         rescheduled_from_cita_id, appointment_root_id, appointment_attempt_number, status_changed_at
+       ) VALUES (
+         $1, $2, $3::date, $4::time, $5,
+         $6, $7, $8, $9,
+         'bot', 'WhatsApp Bot', NOW(), $10,
+         $11, $12, $13,
+         $14, $15, 1, NOW()
+       )
+       RETURNING id`,
+      [
+        leadId,
+        'Agendado',
+        fechaStr,
+        horaStr,
+        notas || '',
+        lead.medilink_numero || '',
+        lead.nombre || '',
+        tipoFinal,
+        doctorNombre,
+        lead.program_to_which_belong_it_is || '',
+        tipoFinal,
+        tipoFinal === 'Consulta medicina general',
+        String(tipoFinal).toLowerCase().includes('consultoria') ? 'consulting' : 'consultation',
+        estado === 'Rescheduled' ? prevId : null,
+        rootId,
+      ]
+    );
+
+    if (prevId && estado === 'Rescheduled') {
       await pool.query(
-        `INSERT INTO wa_citas (telefono, nombre_paciente, email, fecha_cita, hora_cita, tratamiento, notas, estado)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 'confirmada')`,
-        [telefono, nombre, emailFinal, fecha, hora, tipoConsulta || 'Consulta', notas || '']
+        `UPDATE citas
+         SET estado_cita = 'Reagendado',
+             status_changed_at = NOW(),
+             updated_at = NOW()
+         WHERE id = $1`,
+        [prevId]
       );
     }
-    console.log('✅ [apiAgendar] Cita', estado, 'para:', telefono, fecha, hora);
+
+    await pool.query(
+      `UPDATE citas
+       SET appointment_root_id = COALESCE($1, id)
+       WHERE id = $2`,
+      [rootId || inserted.rows[0].id, inserted.rows[0].id]
+    );
+
+    await actualizarLeadEstado({ leadId, doctorId: doctorFinal, fecha, estado, tipoConsulta: tipoFinal });
+    console.log('✅ [apiAgendar] Cita', estado, 'para lead:', leadId, fechaStr, horaStr);
+    return inserted.rows[0];
   } catch (e) {
     console.error('❌ [apiAgendar] Error:', e.message);
     throw e;

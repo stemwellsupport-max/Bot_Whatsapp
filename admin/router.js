@@ -92,10 +92,33 @@ router.get('/api/conversaciones/:telefono', async (req, res) => {
 router.get('/api/citas', async (req, res) => {
   try {
     const { estado, fecha } = req.query;
-    let query = `SELECT * FROM wa_citas`;
+    let query = `
+      SELECT
+        id,
+        COALESCE(NULLIF(TRIM(nombre_paciente), ''), '') AS nombre_paciente,
+        telefono,
+        fecha_cita,
+        hora_inicio AS hora_cita,
+        COALESCE(NULLIF(TRIM(tipo_atencion), ''), COALESCE(NULLIF(TRIM(tratamiento), ''), 'Consulta')) AS tratamiento,
+        CASE
+          WHEN LOWER(COALESCE(estado_cita, '')) IN ('agendado', 'confirmado') THEN 'confirmada'
+          WHEN LOWER(COALESCE(estado_cita, '')) IN ('atendido', 'completado', 'completada') THEN 'completada'
+          WHEN LOWER(COALESCE(estado_cita, '')) IN ('anulado', 'cancelado', 'canceled') THEN 'cancelada'
+          WHEN LOWER(COALESCE(estado_cita, '')) IN ('reagendado', 'cambio de fecha') THEN 'pendiente'
+          ELSE LOWER(COALESCE(estado_cita, 'pendiente'))
+        END AS estado
+      FROM citas`;
     const params = [];
     const conds = [];
-    if (estado) { params.push(estado); conds.push(`estado = $${params.length}`); }
+    if (estado) { params.push(estado); conds.push(`LOWER(
+        CASE
+          WHEN LOWER(COALESCE(estado_cita, '')) IN ('agendado', 'confirmado') THEN 'confirmada'
+          WHEN LOWER(COALESCE(estado_cita, '')) IN ('atendido', 'completado', 'completada') THEN 'completada'
+          WHEN LOWER(COALESCE(estado_cita, '')) IN ('anulado', 'cancelado', 'canceled') THEN 'cancelada'
+          WHEN LOWER(COALESCE(estado_cita, '')) IN ('reagendado', 'cambio de fecha') THEN 'pendiente'
+          ELSE LOWER(COALESCE(estado_cita, 'pendiente'))
+        END
+      ) = LOWER($${params.length})`); }
     if (fecha)  { params.push(fecha);  conds.push(`fecha_cita = $${params.length}`); }
     if (conds.length) query += ' WHERE ' + conds.join(' AND ');
     query += ' ORDER BY fecha_cita ASC, hora_cita ASC';
@@ -110,9 +133,13 @@ router.patch('/api/citas/:id/estado', async (req, res) => {
     const estados = ['confirmada', 'pendiente', 'cancelada', 'completada'];
     if (!estados.includes(estado))
       return res.status(400).json({ ok: false, error: 'Estado inválido' });
+    const estadoCRM = estado === 'confirmada' ? 'Confirmado'
+      : estado === 'pendiente' ? 'Agendado'
+      : estado === 'cancelada' ? 'Anulado'
+      : 'Atendido';
     await pool.query(
-      `UPDATE wa_citas SET estado = $1, actualizado_en = NOW() WHERE id = $2`,
-      [estado, req.params.id]
+      `UPDATE citas SET estado_cita = $1, updated_at = NOW(), status_changed_at = NOW() WHERE id = $2`,
+      [estadoCRM, req.params.id]
     );
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }

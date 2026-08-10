@@ -9,6 +9,7 @@ const { handleIncomingMessage } = require('./commands/handlers');
 const { initDB } = require('./services/postgres');
 const { initDB: initAgendaDB } = require('./services/agenda');
 const adminRouter = require('./admin/router');
+const { initHumanControl, processOutbox } = require('./services/human-control');
 
 const app = express();
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
@@ -394,6 +395,8 @@ async function start() {
   try {
     await initDB();
     await initAgendaDB();
+    await initHumanControl();
+    setInterval(() => processOutbox().catch(err => console.error('âŒ Outbox:', err.message)), 2000);
     app.listen(PORT, () => {
       console.log(`🚀 Stemwell Bot corriendo en puerto ${PORT}`);
       console.log(`📡 Webhook: http://localhost:${PORT}/webhook`);

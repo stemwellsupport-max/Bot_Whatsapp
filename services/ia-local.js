@@ -92,7 +92,10 @@ async function responderConLMStudio(mensajeUsuario, idioma) {
 
   const systemPromptEN = 'You are Sofia, Stemwell Regenerative Medicine assistant in Bogot\u00e1, Colombia.\n\nINFO:\n- Address: Kr 13 #118-08, Usaqu\u00e9n, Bogot\u00e1\n- Phone: +57 310 406 8755\n- Hours: Mon-Fri 8am-5pm, Sat 8am-12pm\n- FREE evaluation: ' + AGENDA_URL + '\n\nSERVICES: Stem Cells, PRP, Exosomes, Hyperbaric Chamber, IV Therapy, Longevity.\nTEAM: Dr. Camilo White (Medical Director), Dr. Sandra (Clinical Advisor).\n\nRULES:\n1. ONLY ENGLISH.\n2. Be warm and empathetic.\n3. NEVER claim cure or guarantee.\n4. If asked services, LIST them.\n5. If asked doctors, SAY their names.\n6. Invite to book: ' + AGENDA_URL;
 
-  const systemPrompt = (idioma === 'en') ? systemPromptEN : systemPromptES;
+  const pricingContext = (idioma === 'en')
+    ? '\nPRICES: free physician advisory call COP $0; virtual consultation COP $50,000; in-person consultation COP $80,000. Never diagnose or prescribe by chat.'
+    : '\nPRECIOS: consultoria con el medico sin costo; consulta virtual $50.000 COP; consulta presencial $80.000 COP. Nunca diagnostiques ni prescribas por chat.';
+  const systemPrompt = ((idioma === 'en') ? systemPromptEN : systemPromptES) + pricingContext;
   const instruccion = (idioma === 'en') ? 'IMPORTANT: Respond in English only.' : 'IMPORTANTE: Responde en espa\u00f1ol solamente.';
   const mensajeReforzado = instruccion + '\n\nUsuario: ' + mensajeUsuario;
 

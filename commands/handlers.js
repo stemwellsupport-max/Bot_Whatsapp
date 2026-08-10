@@ -11,6 +11,7 @@ const { responderConIA, detectarIdioma } = require('../services/ia-local');
 const { detectarIntencion } = require('../services/intents');
 const agenda = require('../services/agenda');
 const identidad = require('../services/identidad');
+const { isPaused } = require('../services/human-control');
 
 // Pool reusado desde postgres.js para consultas de lectura
 const { pool } = require('../services/postgres');
@@ -152,6 +153,37 @@ function menuPrincipal(nombre) {
 }
 
 // Pedir correo (validación de identidad)
+function menuPrincipalStemwell(nombre, idioma = 'es') {
+  if (idioma === 'en') {
+    return {
+      texto: 'Hello' + (nombre ? ' ' + nombre : '') + '! I am Sofia, the Stemwell virtual assistant. How can I help you?',
+      botones: ['About Stemwell', 'Book appointment', 'Reception'],
+    };
+  }
+  return {
+    texto: 'Hola' + (nombre ? ' ' + nombre : '') + '. Soy Sofia, asistente virtual de Stemwell. Como puedo ayudarte?',
+    botones: ['Conocer Stemwell', 'Agendar cita', 'Recepcion'],
+  };
+}
+
+function informacionStemwell(idioma = 'es') {
+  if (idioma === 'en') return 'Stemwell is a regenerative medicine clinic in Bogota. We provide responsible information about our procedures without diagnosing by chat. A physician must assess every individual case.\n\nFree medical advisory call: COP $0\nVirtual consultation: COP $50,000\nIn-person consultation: COP $80,000\n\nReception: +57 310 406 8755';
+  return 'Stemwell es una clinica de medicina regenerativa en Bogota. Podemos orientarte sobre nuestros procedimientos sin diagnosticar por chat; cada caso debe ser valorado por un medico.\n\nConsultoria con el medico: sin costo\nConsulta virtual: $50.000 COP\nConsulta presencial: $80.000 COP\n\nRecepcion: +57 310 406 8755';
+}
+
+function confirmacionCita(nombre, fecha, hora, tipoConsulta, idioma = 'es') {
+  const tipo = tipoConsulta || 'Consultoria sin costo';
+  const virtual = normalizarAux(tipo).includes('virtual');
+  const presencial = normalizarAux(tipo).includes('presencial');
+  const precio = virtual ? '$50.000 COP' : presencial ? '$80.000 COP' : 'sin costo';
+  const pago = virtual ? '\nPago: https://checkout.bold.co/payment/LNK_TOWWHZAP5P' : '';
+  const fechaTexto = idioma === 'en'
+    ? new Date(fecha).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+    : formatearFecha(new Date(fecha));
+  if (idioma === 'en') return `Hello ${nombre || 'patient'}, your ${tipo} at Stemwell is scheduled for ${fechaTexto} at ${hora}. Price: ${precio}.${pago}\nLocation: Cra 13 #118-08, Bogota - https://maps.app.goo.gl/3WFrcsNHF2zjzJtP6\nBring your laboratory tests, diagnostic images and medical records.`;
+  return `Hola ${nombre || 'paciente'}, confirmamos tu ${tipo} en Stemwell para el ${fechaTexto} a las ${hora}. Valor: ${precio}.${pago}\nUbicacion: Cra 13 #118-08, Bogota - https://maps.app.goo.gl/3WFrcsNHF2zjzJtP6\nPor favor trae tus pruebas de laboratorio, imagenes diagnosticas y copia de tu historia clinica.`;
+}
+
 function pedirEmailIdentidad() {
   return '🔐 Para validar si eres nuestro paciente, por favor escribe tu *correo electrónico*.\n\n(Ej: nombre@correo.com)';
 }
@@ -189,11 +221,16 @@ function extraerDiaSeleccionado(texto) {
   return null;
 }
 
+async function getDoctoresActivos() {
+  const result = await pool.query("SELECT id,nombre FROM usuarios WHERE rol IN ('doctor','apoyo') AND activo=true ORDER BY nombre LIMIT 10");
+  return result.rows || [];
+}
+
 // ══════════════════════════════════════════════════════════
 
 // ── Registrar un LEAD NUEVO en el CRM (Fase 2) ─────────────
 // Crea el lead y agenda la cita. Devuelve { ok, leadId, nombre }.
-async function registrarLeadNuevo({ nombre, telefono, email, fecha, hora, doctorId }) {
+async function registrarLeadNuevo({ nombre, telefono, email, fecha, hora, doctorId, tipoConsulta }) {
   try {
     const leadId = await agenda.apiCrearLead({
       nombre: nombre,
@@ -210,7 +247,7 @@ async function registrarLeadNuevo({ nombre, telefono, email, fecha, hora, doctor
       hora: hora,
       email: email || '',
       doctorId: doctorId || null,
-      tipoConsulta: 'Primera Consulta',
+      tipoConsulta: tipoConsulta || 'Consultoria sin costo',
       notas: 'Cita agendada por bot de WhatsApp - actualizar en Medilink.',
     });
     return { ok: true, leadId: leadId, nombre: nombre };
@@ -247,6 +284,13 @@ async function handleIncomingMessage(message, contact) {
   await logMensaje(telefono, nombre, 'entrada', texto);
   await setSesion(telefono, { mensajes: (sesion.mensajes || 0) + 1, idioma: idioma });
 
+  // Cuando recepcion toma el chat desde el CRM, conservamos el historial pero
+  // detenemos por completo las respuestas automaticas para evitar duplicados.
+  if (await isPaused(telefono)) {
+    console.log('[' + telefono + '] Conversacion bajo control humano');
+    return;
+  }
+
   try {
     const st = await agenda.getEstadoAgenda(telefono) || {};
     let respuesta = null;        // texto simple
@@ -259,9 +303,18 @@ async function handleIncomingMessage(message, contact) {
 
     // ── PASO: MENÚ PRINCIPAL ──
     if (st.paso === 'menu_principal') {
-      if (texto.includes('📅 Agendar') || (st.accion === 'agendar' && normalizarAux(texto).includes('agendar'))) {
-        await agenda.setEstadoAgenda(telefono, { paso: 'pedir_correo', accion: 'agendar' });
-        respuesta = pedirEmailIdentidad();
+      if (texto.includes('📅 Agendar') || normalizarAux(texto).includes('agendar') || normalizarAux(texto).includes('book appointment')) {
+        await agenda.setEstadoAgenda(telefono, { paso: 'pedir_tipo', accion: 'agendar' });
+        listRespuesta = {
+          texto: idioma === 'en' ? 'What would you like to book?' : 'Que deseas agendar?',
+          buttonLabel: idioma === 'en' ? 'Choose service' : 'Elegir servicio',
+          sections: [{ title: idioma === 'en' ? 'Appointments' : 'Citas', rows: [
+            { id: 'tipo_consultoria', title: idioma === 'en' ? 'Free advisory call' : 'Consultoria sin costo', description: idioma === 'en' ? 'Call with a physician - free' : 'Llamada con un medico - sin costo' },
+            { id: 'tipo_virtual', title: idioma === 'en' ? 'Virtual consultation' : 'Consulta virtual', description: '$50.000 COP' },
+            { id: 'tipo_presencial', title: idioma === 'en' ? 'In-person consult' : 'Consulta presencial', description: '$80.000 COP' },
+            { id: 'tipo_medilink', title: idioma === 'en' ? 'Book on website' : 'Agendar en la pagina', description: 'Medilink' },
+          ]}],
+        };
       } else if (texto.includes('🔄 Reagendar') || normalizarAux(texto).includes('reagendar')) {
         await agenda.setEstadoAgenda(telefono, { paso: 'pedir_correo', accion: 'reagendar' });
         respuesta = pedirEmailIdentidad();
@@ -270,15 +323,66 @@ async function handleIncomingMessage(message, contact) {
         respuesta = pedirEmailIdentidad();
       } else {
         // Mostrar menú principal con botones
-        botonesRespuesta = menuPrincipal(nombre);
+        const menuText = normalizarAux(texto);
+        if (/(conocer|about|informacion|information)/.test(menuText)) {
+          botonesRespuesta = {
+            texto: informacionStemwell(idioma),
+            botones: idioma === 'en' ? ['Book appointment', 'Reception', 'Menu'] : ['Agendar cita', 'Recepcion', 'Menu'],
+          };
+        } else if (/(recepcion|reception|especialista|specialist)/.test(menuText)) {
+          botonesRespuesta = {
+            texto: idioma === 'en'
+              ? 'You can contact reception at *+57 310 406 8755*. I can also help you book here.'
+              : 'Puedes comunicarte con recepcion al *+57 310 406 8755*. Tambien puedo ayudarte a agendar por este chat.',
+            botones: idioma === 'en' ? ['Book appointment', 'Menu'] : ['Agendar cita', 'Menu'],
+          };
+        } else {
+          botonesRespuesta = menuPrincipalStemwell(nombre, idioma);
+        }
         await agenda.setEstadoAgenda(telefono, { paso: 'menu_principal' });
       }
     }
 
     // ── PASO: SIN ESTADO (primera interacción) → menú ──
     else if (!st.paso || st.paso === 'inicio') {
-      botonesRespuesta = menuPrincipal(nombre);
+      botonesRespuesta = menuPrincipalStemwell(nombre, idioma);
       await agenda.setEstadoAgenda(telefono, { paso: 'menu_principal' });
+    }
+
+    // ── PASO: ELEGIR TIPO DE CITA ──
+    else if (st.paso === 'pedir_tipo') {
+      const typeText = normalizarAux(texto);
+      if (typeText.includes('pagina') || typeText.includes('website') || typeText.includes('medilink')) {
+        await agenda.resetEstadoAgenda(telefono);
+        respuesta = (idioma === 'en' ? 'You can book directly here: ' : 'Puedes agendar directamente aqui: ') + AGENDA_URL;
+      } else {
+        const tipoConsulta = typeText.includes('virtual') ? 'Consulta virtual - $50.000 COP'
+          : (typeText.includes('presencial') || typeText.includes('in-person')) ? 'Consulta presencial - $80.000 COP'
+          : 'Consultoria sin costo';
+        const doctores = await getDoctoresActivos().catch(() => []);
+        if (doctores.length) {
+          await agenda.setEstadoAgenda(telefono, { ...st, paso: 'pedir_doctor', tipoConsulta, doctores });
+          listRespuesta = {
+            texto: idioma === 'en' ? 'Choose the physician for your appointment.' : 'Elige el medico para tu cita.',
+            buttonLabel: idioma === 'en' ? 'Choose physician' : 'Elegir medico',
+            sections: [{ title: idioma === 'en' ? 'Physicians' : 'Medicos', rows: doctores.map(d => ({ id: 'doctor_' + d.id, title: d.nombre })) }],
+          };
+        } else {
+          await agenda.setEstadoAgenda(telefono, { ...st, paso: 'pedir_correo', tipoConsulta });
+          respuesta = idioma === 'en' ? 'Please enter your email so I can find your patient record and appointments.' : pedirEmailIdentidad();
+        }
+      }
+    }
+
+    // ── PASO: ELEGIR MEDICO ──
+    else if (st.paso === 'pedir_doctor') {
+      const selected = (st.doctores || []).find(d => normalizarAux(texto).includes(normalizarAux(d.nombre)) || normalizarAux(texto) === 'doctor_' + d.id);
+      if (!selected) {
+        respuesta = idioma === 'en' ? 'Please choose a physician from the list.' : 'Por favor elige un medico de la lista.';
+      } else {
+        await agenda.setEstadoAgenda(telefono, { ...st, paso: 'pedir_correo', doctorId: selected.id, doctorNombre: selected.nombre });
+        respuesta = idioma === 'en' ? 'Please enter your email so I can find your patient record and appointments.' : pedirEmailIdentidad();
+      }
     }
 
     // ── PASO: PEDIR CORREO (validación de identidad) ──
@@ -288,7 +392,7 @@ async function handleIncomingMessage(message, contact) {
         const lead = await buscarLeadTrasValidar(telefono, email);
         if (lead) {
           // Es cliente existente
-          const citas = await identidad.getCitasPorTelefono({ pool, telefono });
+          const citas = await identidad.getCitasPorTelefono({ pool, telefono, leadId: lead.id });
           await agenda.setEstadoAgenda(telefono, {
             ...st, paso: 'validado', email, leadId: lead.id, leadNombre: lead.nombre,
             tieneCita: citas.length > 0, citas,
@@ -361,7 +465,7 @@ async function handleIncomingMessage(message, contact) {
         await agenda.resetEstadoAgenda(telefono);
         respuesta = '¡Entendido! 😊 Estoy aquí por si necesitas algo más.';
       } else {
-        botonesRespuesta = menuPrincipal(nombre);
+        botonesRespuesta = menuPrincipalStemwell(nombre, idioma);
         await agenda.setEstadoAgenda(telefono, { paso: 'menu_principal' });
       }
     }
@@ -377,7 +481,7 @@ async function handleIncomingMessage(message, contact) {
       })();
       if (diaEncontrado) {
         const fecha = fechaParaDia(diaEncontrado);
-        const { libres } = await agenda.getDisponibilidad({ pool, fecha });
+        const { libres } = await agenda.getDisponibilidad({ pool, fecha, doctorNombre: st.doctorNombre || '' });
         if (!libres || !libres.length) {
           respuesta = 'Lo siento, para ' + formatearFecha(fecha) + ' no hay horarios disponibles. 😔\n\nElige otro día de la lista.';
           listRespuesta = {
@@ -417,7 +521,7 @@ async function handleIncomingMessage(message, contact) {
         const hora = horaElegida;
         if (st.leadId && st.leadNombre && st.email) {
           // Cliente existente agendando/reagendando
-          const agendado = await agendaReal(st, fecha, hora, nombre, telefono);
+          const agendado = await agendaReal(st, fecha, hora, nombre, telefono, idioma);
           await agenda.resetEstadoAgenda(telefono);
           respuesta = agendado;
         } else {
@@ -428,10 +532,12 @@ async function handleIncomingMessage(message, contact) {
             telefono, email,
             fecha: new Date(fecha).toISOString().slice(0, 10),
             hora,
+            doctorId: st.doctorId,
+            tipoConsulta: st.tipoConsulta,
           });
           await agenda.resetEstadoAgenda(telefono);
           respuesta = reg.ok
-            ? '¡Listo! 🎉 reservamos tu cita para *' + formatearFecha(new Date(fecha)) + '* a las *' + hora + '*.\n\nTe confirmaremos por WhatsApp. ¡Nos vemos en Stemwell! 💙'
+            ? confirmacionCita(nombre, fecha, hora, st.tipoConsulta, idioma)
             : 'Parece que ya existe un registro con esos datos. 📋 Agenda aquí: ' + AGENDA_URL;
         }
       } else {
@@ -463,7 +569,7 @@ async function handleIncomingMessage(message, contact) {
       const esAgenda = /(agendar|agenda cita|cita|reagendar|reservar|horario|disponibilidad)/.test(t) && !/(cancelar|anular)/.test(t);
       if (esAgenda) {
         await agenda.setEstadoAgenda(telefono, { paso: 'menu_principal' });
-        botonesRespuesta = menuPrincipal(nombre);
+        botonesRespuesta = menuPrincipalStemwell(nombre, idioma);
       } else {
         const intencion = detectarIntencion(texto);
         if (intencion === 'cancelar_cita') {
@@ -474,7 +580,7 @@ async function handleIncomingMessage(message, contact) {
           respuesta = pedirEmailIdentidad();
         } else if (intencion === 'agendar_cita' || intencion === 'consultar_disponibilidad') {
           await agenda.setEstadoAgenda(telefono, { paso: 'menu_principal' });
-          botonesRespuesta = menuPrincipal(nombre);
+          botonesRespuesta = menuPrincipalStemwell(nombre, idioma);
         } else if (intencion === 'hablar_asesor') {
           respuesta = '¡Entendido! Un asesor de Stemwell te atenderá con gusto. 🙋\n\n📞 Escríbenos o llámanos al *+57 310 406 8755*\n💬 O agenda tu evaluación SIN COSTO: ' + AGENDA_URL + '\n\nUn asesor se comunicará contigo pronto.';
         } else {
@@ -505,7 +611,7 @@ async function handleIncomingMessage(message, contact) {
 }
 
 // Función auxiliar: agendar cita para cliente existente (agendar/reagendar)
-async function agendaReal(st, fecha, hora, nombre, telefono) {
+async function agendaReal(st, fecha, hora, nombre, telefono, idioma = 'es') {
   const lead = await buscarLeadTrasValidar(telefono, st.email);
   if (!lead) return '⚠️ No pudimos confirmar tu registro. Intenta de nuevo o agenda aquí: ' + AGENDA_URL;
   try {
@@ -515,11 +621,11 @@ async function agendaReal(st, fecha, hora, nombre, telefono) {
       fecha: new Date(fecha).toISOString().slice(0, 10),
       hora,
       email: st.email || '',
-      doctorId: lead.doctor_id || undefined,
-      tipoConsulta: 'Primera Consulta',
+      doctorId: st.doctorId || lead.doctor_id || undefined,
+      tipoConsulta: st.tipoConsulta || 'Consultoria sin costo',
       notas: 'Cita ' + (st.esReagenda ? 'REAGENDADA' : 'AGENDADA') + ' por bot de WhatsApp - actualizar en Medilink.',
     });
-    return '¡Perfecto ' + (lead.nombre || nombre) + '! ✅ Tu cita quedó ' + (st.esReagenda ? 'reagendada' : 'reservada') + ' para *' + formatearFecha(new Date(fecha)) + '* a las *' + hora + '*.\n\nTe confirmaremos por WhatsApp. 💙';
+    return confirmacionCita(lead.nombre || nombre, fecha, hora, st.tipoConsulta, idioma);
   } catch (e) {
     console.error('❌ agendaReal:', e.message);
     return 'Tuvimos un problema al registrar tu cita. 🙏 Agenda aquí: ' + AGENDA_URL;
