@@ -18,6 +18,30 @@ const { pool } = require('../services/postgres');
 
 const AGENDA_URL = process.env.AGENDA_URL || 'https://ff.healthatom.io/ETDnHN';
 
+function telefonoWhatsAppValido(valor) {
+  const telefono = String(valor || '').replace(/\D/g, '');
+  return /^\d{8,15}$/.test(telefono) ? telefono : '';
+}
+
+// Los formularios publicitarios pueden llegar al mismo webhook. Son avisos
+// para ventas, no mensajes escritos por pacientes, y no deben entrar a la IA.
+function esNotificacionFormularioCampana(texto) {
+  const normalizado = String(texto || '').normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const marcadores = [
+    /^\s*full name\s*:/im,
+    /^\s*phone number\s*:/im,
+    /^\s*email\s*:/im,
+    /^\s*inbox url\s*:/im,
+    /^\s*especialidad medica\s*:/im,
+    /con que frecuencia.*sala de cirugia/i,
+    /cuando te gustaria recibir informacion/i,
+  ].filter(regex => regex.test(normalizado)).length;
+  const anunciaFormulario = /complete el formulario|completed the form|lead form|form submission/.test(normalizado);
+  const contieneInbox = /^\s*inbox url\s*:/im.test(normalizado);
+  return (anunciaFormulario && marcadores >= 2) || (contieneInbox && marcadores >= 3) || marcadores >= 5;
+}
+
 function pausaNatural() {
   const ms = Math.floor(Math.random() * 800) + 400;
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -173,6 +197,7 @@ function informacionStemwell(idioma = 'es') {
 
 function confirmacionCita(nombre, fecha, hora, tipoConsulta, idioma = 'es') {
   const tipo = tipoConsulta || 'Consultoria sin costo';
+  const consultoria = normalizarAux(tipo).includes('consultoria');
   const virtual = normalizarAux(tipo).includes('virtual');
   const presencial = normalizarAux(tipo).includes('presencial');
   const precio = virtual ? '$50.000 COP' : presencial ? '$80.000 COP' : 'sin costo';
@@ -180,8 +205,20 @@ function confirmacionCita(nombre, fecha, hora, tipoConsulta, idioma = 'es') {
   const fechaTexto = idioma === 'en'
     ? new Date(fecha).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
     : formatearFecha(new Date(fecha));
-  if (idioma === 'en') return `Hello ${nombre || 'patient'}, your ${tipo} at Stemwell is scheduled for ${fechaTexto} at ${hora}. Price: ${precio}.${pago}\nLocation: Cra 13 #118-08, Bogota - https://maps.app.goo.gl/3WFrcsNHF2zjzJtP6\nBring your laboratory tests, diagnostic images and medical records.`;
-  return `Hola ${nombre || 'paciente'}, confirmamos tu ${tipo} en Stemwell para el ${fechaTexto} a las ${hora}. Valor: ${precio}.${pago}\nUbicacion: Cra 13 #118-08, Bogota - https://maps.app.goo.gl/3WFrcsNHF2zjzJtP6\nPor favor trae tus pruebas de laboratorio, imagenes diagnosticas y copia de tu historia clinica.`;
+  if (consultoria && idioma === 'en') {
+    return `Hello ${nombre || 'patient'}, your free phone advisory call with a Stemwell physician is scheduled for ${fechaTexto} at ${hora}.\n\nThe physician will call you at this WhatsApp number. You do not need to come to the clinic.`;
+  }
+  if (consultoria) {
+    return `Hola ${nombre || 'paciente'}, confirmamos tu consultoria telefonica sin costo con un medico de Stemwell para el ${fechaTexto} a las ${hora}.\n\nEl medico te llamara a este mismo numero de WhatsApp. No necesitas venir a la clinica.`;
+  }
+  if (virtual && idioma === 'en') {
+    return `Hello ${nombre || 'patient'}, your virtual consultation is scheduled for ${fechaTexto} at ${hora}. Price: ${precio}.${pago}\n\nYou will receive the connection details through WhatsApp. Please have your laboratory tests, diagnostic images and medical history available.`;
+  }
+  if (idioma === 'en') return `Hello ${nombre || 'patient'}, your in-person consultation at Stemwell is scheduled for ${fechaTexto} at ${hora}. Price: ${precio}.\nLocation: Cra 13 #118-08, Bogota - https://maps.app.goo.gl/3WFrcsNHF2zjzJtP6\nBring your laboratory tests, diagnostic images and medical records.`;
+  if (virtual) {
+    return `Hola ${nombre || 'paciente'}, confirmamos tu consulta virtual en Stemwell para el ${fechaTexto} a las ${hora}. Valor: ${precio}.${pago}\n\nRecibiras por WhatsApp la informacion para conectarte. Por favor ten disponibles tus pruebas de laboratorio, imagenes diagnosticas y antecedentes medicos.`;
+  }
+  return `Hola ${nombre || 'paciente'}, confirmamos tu consulta presencial en Stemwell para el ${fechaTexto} a las ${hora}. Valor: ${precio}.\nUbicacion: Cra 13 #118-08, Bogota - https://maps.app.goo.gl/3WFrcsNHF2zjzJtP6\nPor favor trae tus pruebas de laboratorio, imagenes diagnosticas y copia de tu historia clinica.`;
 }
 
 function pedirEmailIdentidad() {
@@ -226,6 +263,150 @@ async function getDoctoresActivos() {
   return result.rows || [];
 }
 
+function parecePreguntaLibre(texto) {
+  const t = normalizarAux(texto);
+  return /[?\u00bf]/.test(texto) ||
+    /\b(que|como|cual|cuales|por que|puede|pueden|sirve|sirven|ayuda|ayudar|riesgo|peligro|contraindic|cancer|dolor|rodilla|hombro|espalda|celula|stem ?cell|prp|exosoma|foto\s*biomod|laser|tratamiento|procedimiento|difference|what|how|why|can|could|danger|risk|pain|knee|shoulder|back|cancer|certif)\b/.test(t);
+}
+
+function esEntradaEsperada(st, texto) {
+  const paso = st && st.paso;
+  const t = normalizarAux(texto);
+  if (!paso) return false;
+  if (paso === 'pedir_correo') return esCorreoCliente(texto);
+  if (paso === 'pedir_tipo') return /(consultoria|advisory|virtual|presencial|in-person|pagina|website|medilink)/.test(t);
+  if (paso === 'pedir_doctor') return (st.doctores || []).some(d => t.includes(normalizarAux(d.nombre)) || t === 'doctor_' + d.id);
+  if (paso === 'seleccionar_dia') return Boolean(extraerDiaSeleccionado(texto));
+  if (paso === 'seleccionar_hora') return Boolean(extraerHora(texto));
+  if (paso === 'confirmar_cancelar') return /^(si|yes|no)|cancelar/.test(t);
+  if (paso === 'validado' || paso === 'validado_nuevo') return /(agendar|reagendar|cancelar|no|gracias)/.test(t);
+  if (paso === 'menu_principal') return /(conocer|about|informacion|information|recepcion|reception|menu|agendar|book|reagendar|cancelar)/.test(t);
+  return false;
+}
+
+function respuestaMedicaSegura(texto, idioma = 'es') {
+  const t = normalizarAux(texto);
+  const en = idioma === 'en';
+  if (/(foto\s*biomod|photo.?biomod|laser).*(cuanto|vale|precio|costo|cost|price|how much)|(cuanto|vale|precio|costo|cost|price|how much).*(foto\s*biomod|photo.?biomod|laser)/.test(t)) {
+    return en
+      ? 'I do not have a registered price for photobiomodulation, so I should not invent one. Reception can confirm the current price at +57 310 406 8755. The only free service is the physician advisory phone call; the virtual medical consultation costs COP $50,000 and the in-person medical consultation costs COP $80,000.'
+      : 'No tengo registrado el precio de la fotobiomodulacion, por lo que no debo inventarlo. Recepcion puede confirmar el valor vigente en el +57 310 406 8755. Lo unico sin costo es la consultoria telefonica con el medico; la consulta medica virtual cuesta $50.000 COP y la presencial $80.000 COP.';
+  }
+  if (/\b(cancer|canceroso|tumor|oncolog)/.test(t)) {
+    return en
+      ? 'I cannot confirm that a regenerative treatment is appropriate for a person with cancer. Cancer history, current disease and oncology treatment can change eligibility and must be reviewed by a physician before considering any procedure. Do not start or stop treatment based on this chat.'
+      : 'No puedo confirmar que un tratamiento regenerativo sea adecuado para una persona con cancer. Los antecedentes, la enfermedad activa y el tratamiento oncologico pueden cambiar la elegibilidad y deben ser revisados por un medico antes de considerar cualquier procedimiento. No inicies ni suspendas tratamientos basandote en este chat.';
+  }
+  if (/(peligro|peligros|danin|danger|safe|segur|riesgo|contraindic|efecto secundario|side effect)/.test(t)) {
+    return en
+      ? 'Risks and contraindications depend on the procedure, medical history, medications and current condition. I cannot determine safety for your case by chat. A physician must review your history and tests and explain expected benefits, alternatives and possible adverse effects.'
+      : 'Los riesgos y contraindicaciones dependen del procedimiento, los antecedentes, los medicamentos y la condicion actual. No puedo determinar por chat si es seguro para tu caso. Un medico debe revisar tu historia y examenes y explicarte beneficios esperados, alternativas y posibles efectos adversos.';
+  }
+  if (/(certif|licen|credential|profesional.*formacion)/.test(t)) {
+    return en
+      ? 'I do not have access to the professionals\' credential documents, so I should not confirm details I cannot verify. Reception can provide the corresponding professional and institutional information at +57 310 406 8755.'
+      : 'No tengo acceso a los documentos de acreditacion de los profesionales, por lo que no debo confirmar datos que no puedo verificar. Recepcion puede entregarte la informacion profesional e institucional correspondiente en el +57 310 406 8755.';
+  }
+  if (/(diferencia|diferencias|difference|differences|todas.*opcion|all.*option|all.*service)/.test(t)) {
+    return en
+      ? 'In general: PRP uses platelets from your own blood; mesenchymal cells are studied and used in selected regenerative protocols; exosomes are cell-derived messengers; hyperbaric therapy increases oxygen exposure under pressure; IV therapy administers fluids or nutrients; and photobiomodulation uses low-level laser light in physician-guided protocols. They are not interchangeable, and the appropriate option depends on a medical assessment.'
+      : 'En general: el PRP usa plaquetas de tu propia sangre; las celulas mesenquimales se estudian y utilizan en protocolos regenerativos seleccionados; los exosomas son mensajeros derivados de celulas; la terapia hiperbarica aumenta la exposicion a oxigeno bajo presion; la terapia intravenosa administra liquidos o nutrientes; y la fotobiomodulacion usa luz laser de baja intensidad dentro de protocolos definidos por el equipo medico. No son tratamientos intercambiables y la opcion adecuada depende de una valoracion medica.';
+  }
+  if (/(que son.*celula|what are.*stem|stem ?cell.*what)/.test(t)) {
+    return en
+      ? 'Stem cells are cells capable of self-renewal and, depending on their type, developing into specialized cells. Some uses are established and others remain under study. Whether they are relevant to a specific condition requires medical diagnosis and review of the available evidence.'
+      : 'Las celulas madre son celulas capaces de autorrenovarse y, segun su tipo, convertirse en celulas especializadas. Algunos usos estan establecidos y otros siguen en investigacion. Saber si son pertinentes para una condicion concreta requiere diagnostico medico y revision de la evidencia disponible.';
+  }
+  if (/(celula|stem ?cell).*(sirve|ayuda|help|dolor|pain)|(sirve|ayuda|help).*(celula|stem ?cell)/.test(t)) {
+    return en
+      ? 'Stem-cell-based approaches may be considered in selected cases, but knee, shoulder or back pain can have many different causes. I cannot tell from chat whether they would help you. A physician needs your diagnosis, examination and usually imaging to discuss suitable options and realistic expectations.'
+      : 'Los tratamientos basados en celulas pueden considerarse en casos seleccionados, pero el dolor de rodilla, hombro o espalda puede tener causas muy diferentes. No puedo decir por chat si te servirian. Un medico necesita conocer el diagnostico, examinarte y normalmente revisar imagenes para explicarte opciones adecuadas y expectativas realistas.';
+  }
+  return null;
+}
+
+function respuestaSeguimientoCita(st, texto, idioma = 'es') {
+  if (!st || st.paso !== 'post_agendado' || !st.citaConfirmada) return null;
+  const t = normalizarAux(texto);
+  const cita = st.citaConfirmada;
+  const tipo = normalizarAux(cita.tipoConsulta || '');
+  const esConsultoria = tipo.includes('consultoria');
+  const preguntaConfirmacion = /(call me|who.*call|office.*call|appointment|confirm|scheduled|avis|llam|quien|consultorio|agendad|reservad)/.test(t);
+  if (!preguntaConfirmacion) return null;
+  const fecha = cita.fecha ? new Date(cita.fecha) : null;
+  const fechaTexto = fecha
+    ? (idioma === 'en'
+      ? fecha.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+      : formatearFecha(fecha))
+    : '';
+  const medico = cita.doctorNombre ? (idioma === 'en' ? ` with ${cita.doctorNombre}` : ` con ${cita.doctorNombre}`) : '';
+  if (esConsultoria && idioma === 'en') {
+    return `Your free phone advisory call${medico} is already registered for ${fechaTexto} at ${cita.hora}. The physician or Stemwell medical team will call you at this same WhatsApp number. You do not need to book again or visit the clinic.`;
+  }
+  if (esConsultoria) {
+    return `Tu consultoria telefonica sin costo${medico} ya esta registrada para el ${fechaTexto} a las ${cita.hora}. El medico o el equipo medico de Stemwell te llamara a este mismo numero de WhatsApp. No necesitas volver a agendar ni venir a la clinica.`;
+  }
+  if (idioma === 'en') {
+    return `Your appointment${medico} is already registered for ${fechaTexto} at ${cita.hora}. The Stemwell team will contact you through this WhatsApp number if any additional confirmation or connection details are needed. You do not need to book again.`;
+  }
+  return `Tu cita${medico} ya esta registrada para el ${fechaTexto} a las ${cita.hora}. El equipo de Stemwell te contactara por este mismo WhatsApp si necesita enviarte una confirmacion o instrucciones adicionales. No necesitas volver a agendar.`;
+}
+
+function pistaParaRetomar(st, idioma = 'es') {
+  const paso = st && st.paso;
+  if (!paso || paso === 'menu_principal') return idioma === 'en' ? '\n\nI can also help you book, reschedule or cancel an appointment.' : '\n\nTambien puedo ayudarte a agendar, reagendar o cancelar una cita.';
+  const en = idioma === 'en';
+  const pistas = {
+    pedir_tipo: en ? 'When you are ready, choose the appointment type from the previous list.' : 'Cuando quieras continuar, elige el tipo de cita de la lista anterior.',
+    pedir_doctor: en ? 'When you are ready, choose a physician from the previous list.' : 'Cuando quieras continuar, elige un medico de la lista anterior.',
+    pedir_correo: en ? 'To continue, send the email used for your Stemwell record.' : 'Para continuar, escribe el correo usado en tu registro de Stemwell.',
+    seleccionar_dia: en ? 'When you are ready, choose a day from the previous list.' : 'Cuando quieras continuar, elige un dia de la lista anterior.',
+    seleccionar_hora: en ? 'When you are ready, choose one of the available times.' : 'Cuando quieras continuar, elige uno de los horarios disponibles.',
+    validado: en ? 'You can continue with booking, rescheduling or cancellation.' : 'Puedes continuar con agendar, reagendar o cancelar.',
+    validado_nuevo: en ? 'Tell me if you want to continue as a new patient.' : 'Indica si deseas continuar como paciente nuevo.',
+    post_agendado: en ? 'Your appointment is already registered; you do not need to book again.' : 'Tu cita ya esta registrada; no necesitas volver a agendar.',
+  };
+  return pistas[paso] ? '\n\n' + pistas[paso] : '';
+}
+
+function listaDiasReagenda(idioma = 'es') {
+  return {
+    texto: idioma === 'en' ? 'Which new day would you prefer?' : 'Para que nuevo dia quieres reagendar tu cita?',
+    buttonLabel: idioma === 'en' ? 'Choose day' : 'Elegir dia',
+    sections: [{ title: idioma === 'en' ? 'New day' : 'Nuevo dia', rows: DIAS_MENU.map(d => ({
+      id: 'dia_' + normalizarAux(d), title: d, description: formatearFecha(fechaParaDia(normalizarAux(d))),
+    })) }],
+  };
+}
+
+async function recuperarContextoCita(telefono, estadoActual = {}) {
+  if (estadoActual.paso === 'post_agendado' && estadoActual.citaConfirmada) return estadoActual;
+  const leads = await validarIdentidad(telefono, null);
+  const lead = leads && leads[0];
+  if (!lead) return estadoActual;
+  const citas = await identidad.getCitasPorTelefono({ pool, telefono, leadId: lead.id });
+  const terminales = /(anulado|cancelado|canceled|no show|no asiste|reagendado|cambio de fecha|atendido|completado|completada)/;
+  const activas = (citas || []).filter(c => !terminales.test(normalizarAux(c.estado_cita || '')));
+  if (!activas.length) return estadoActual;
+  const hoy = hoyLocal().getTime();
+  const proxima = activas.find(c => new Date(c.fecha_cita).getTime() >= hoy) || activas[activas.length - 1];
+  return {
+    ...estadoActual,
+    paso: 'post_agendado',
+    leadId: lead.id,
+    leadNombre: lead.nombre,
+    email: lead.email || estadoActual.email || '',
+    citaConfirmada: {
+      leadId: lead.id,
+      fecha: proxima.fecha_cita,
+      hora: String(proxima.hora_inicio || '').slice(0, 5),
+      tipoConsulta: proxima.tipo_atencion || lead.modalidad_consulta || 'Consulta',
+      doctorId: lead.doctor_id || null,
+      doctorNombre: lead.doctor_nombre || '',
+    },
+  };
+}
+
 // ══════════════════════════════════════════════════════════
 
 // ── Registrar un LEAD NUEVO en el CRM (Fase 2) ─────────────
@@ -258,8 +439,8 @@ async function registrarLeadNuevo({ nombre, telefono, email, fecha, hora, doctor
 }
 
 async function handleIncomingMessage(message, contact) {
-  const telefono = contact.wa_id;
-  const nombre = contact.profile?.name || '';
+  const telefono = telefonoWhatsAppValido(message?.from || contact?.wa_id);
+  const nombre = contact?.profile?.name || '';
   const tipo = message.type;
   let texto = '';
 
@@ -274,9 +455,21 @@ async function handleIncomingMessage(message, contact) {
   }
 
   if (!texto || texto.length < 2) return;
+  if (esNotificacionFormularioCampana(texto)) {
+    console.log(`CAMPAIGN_LEAD_IGNORED [${telefono || 'sin-remitente'}] No se envio respuesta automatica`);
+    return;
+  }
+  if (!telefono) {
+    console.warn('WHATSAPP_MESSAGE_IGNORED Remitente ausente o invalido');
+    return;
+  }
 
   const sesion = await getSesion(telefono);
-  const idioma = sesion.idioma || detectarIdioma(texto);
+  // Un paciente puede cambiar de idioma durante la misma conversacion.
+  // Priorizamos el idioma del mensaje actual y conservamos el anterior solo
+  // para entradas neutras como un correo, una fecha o una hora.
+  const idiomaDetectado = detectarIdioma(texto);
+  const idioma = idiomaDetectado || sesion.idioma || 'es';
 
   console.log('📩 [' + telefono + '] ' + nombre + ': "' + texto + '" (' + idioma + ')');
 
@@ -296,14 +489,70 @@ async function handleIncomingMessage(message, contact) {
     let respuesta = null;        // texto simple
     let botonesRespuesta = null; // {botones:[], texto}
     let listRespuesta = null;    // {texto, buttonLabel, sections}
+    const textoGlobal = normalizarAux(texto);
+    const intencionGlobal = detectarIntencion(texto);
+    const interrumpeFlujo = !['menu_principal', 'validado', 'validado_nuevo', 'confirmar_cancelar'].includes(st.paso);
 
     // ═══════════════════════════════════════════════════════
     // NUEVO FLUJO GUIADO POR BOTONES
     // ═══════════════════════════════════════════════════════
 
+    // Comandos globales: funcionan sin importar en que paso este el paciente.
+    if (/^(menu|menÃº|inicio|start|volver|salir|reiniciar)$/.test(textoGlobal)) {
+      await agenda.setEstadoAgenda(telefono, { paso: 'menu_principal' });
+      botonesRespuesta = menuPrincipalStemwell(nombre, idioma);
+    }
+    else if (/^(gracias|muchas gracias|thanks|thank you|listo)$/.test(textoGlobal)) {
+      await agenda.resetEstadoAgenda(telefono);
+      respuesta = idioma === 'en' ? 'You are welcome. I am here whenever you need us.' : 'Con gusto. Estoy aqui cuando nos necesites.';
+    }
+    else if (st.paso && st.paso !== 'menu_principal' && /^(hola|hello|hey|buenas|buenos dias|buenas tardes)$/.test(textoGlobal)) {
+      respuesta = (idioma === 'en' ? 'Hello! We can continue whenever you are ready.' : 'Hola. Podemos continuar cuando quieras.') + pistaParaRetomar(st, idioma);
+    }
+    else if (interrumpeFlujo && intencionGlobal === 'reagendar_cita') {
+      if (st.leadId && st.email) {
+        await agenda.setEstadoAgenda(telefono, { ...st, paso: 'seleccionar_dia', esReagenda: true });
+        listRespuesta = listaDiasReagenda(idioma);
+      } else {
+        await agenda.setEstadoAgenda(telefono, { ...st, paso: 'pedir_correo', accion: 'reagendar' });
+        respuesta = idioma === 'en'
+          ? 'To reschedule an existing appointment, please enter the email used for your Stemwell record.'
+          : 'Para reagendar una cita existente, escribe el correo usado en tu registro de Stemwell.';
+      }
+    }
+    else if (interrumpeFlujo && intencionGlobal === 'cancelar_cita') {
+      if (st.leadId) {
+        await agenda.setEstadoAgenda(telefono, { ...st, paso: 'confirmar_cancelar' });
+        botonesRespuesta = {
+          texto: idioma === 'en' ? 'Do you confirm the appointment cancellation?' : 'Confirmas la cancelacion de tu cita?',
+          botones: idioma === 'en' ? ['Yes, cancel', 'No'] : ['Si, cancelar', 'No'],
+        };
+      } else {
+        await agenda.setEstadoAgenda(telefono, { ...st, paso: 'pedir_correo', accion: 'cancelar' });
+        respuesta = idioma === 'en'
+          ? 'To cancel an existing appointment, please enter the email used for your Stemwell record.'
+          : 'Para cancelar una cita existente, escribe el correo usado en tu registro de Stemwell.';
+      }
+    }
+    else if (parecePreguntaLibre(texto) && !esEntradaEsperada(st, texto) && intencionGlobal === 'informacion') {
+      const pareceSeguimiento = /(call me|who.*call|office.*call|appointment|confirm|scheduled|avis|llam|quien|consultorio|agendad|reservad)/.test(textoGlobal);
+      const contexto = pareceSeguimiento ? await recuperarContextoCita(telefono, st) : st;
+      if (contexto.paso === 'post_agendado' && st.paso !== 'post_agendado') {
+        await agenda.setEstadoAgenda(telefono, contexto);
+      }
+      const seguimiento = respuestaSeguimientoCita(contexto, texto, idioma);
+      const segura = respuestaMedicaSegura(texto, idioma);
+      const consultaIA = contexto.paso === 'post_agendado' && contexto.citaConfirmada
+        ? `[The patient already has a registered appointment. Do not recommend booking again and do not send a booking link. Answer only the new question.]\n${texto}`
+        : texto;
+      respuesta = seguimiento || segura || await responderConIA(consultaIA, nombre, telefono, idioma, sendMessage);
+      if (!seguimiento) respuesta += pistaParaRetomar(contexto, idioma);
+      if (!contexto.paso) await agenda.setEstadoAgenda(telefono, { paso: 'menu_principal' });
+    }
+
     // ── PASO: MENÚ PRINCIPAL ──
-    if (st.paso === 'menu_principal') {
-      if (texto.includes('📅 Agendar') || normalizarAux(texto).includes('agendar') || normalizarAux(texto).includes('book appointment')) {
+    else if (st.paso === 'menu_principal') {
+      if (texto.includes('📅 Agendar') || intencionGlobal === 'agendar_cita') {
         await agenda.setEstadoAgenda(telefono, { paso: 'pedir_tipo', accion: 'agendar' });
         listRespuesta = {
           texto: idioma === 'en' ? 'What would you like to book?' : 'Que deseas agendar?',
@@ -315,10 +564,10 @@ async function handleIncomingMessage(message, contact) {
             { id: 'tipo_medilink', title: idioma === 'en' ? 'Book on website' : 'Agendar en la pagina', description: 'Medilink' },
           ]}],
         };
-      } else if (texto.includes('🔄 Reagendar') || normalizarAux(texto).includes('reagendar')) {
+      } else if (texto.includes('🔄 Reagendar') || intencionGlobal === 'reagendar_cita') {
         await agenda.setEstadoAgenda(telefono, { paso: 'pedir_correo', accion: 'reagendar' });
         respuesta = pedirEmailIdentidad();
-      } else if (texto.includes('❌ Cancelar') || normalizarAux(texto).includes('cancelar')) {
+      } else if (texto.includes('❌ Cancelar') || intencionGlobal === 'cancelar_cita') {
         await agenda.setEstadoAgenda(telefono, { paso: 'pedir_correo', accion: 'cancelar' });
         respuesta = pedirEmailIdentidad();
       } else {
@@ -424,7 +673,7 @@ async function handleIncomingMessage(message, contact) {
     else if (st.paso === 'validado' || st.paso === 'validado_nuevo') {
       const quiereAgendar =
         texto.includes('Sí, agendar') || texto.includes('Agendar otra') ||
-        normalizarAux(texto).includes('agendar');
+        intencionGlobal === 'agendar_cita';
       if (quiereAgendar) {
         // Mostrar días (Lunes a Sábado) como lista interactiva
         await agenda.setEstadoAgenda(telefono, { ...st, paso: 'seleccionar_dia' });
@@ -441,7 +690,7 @@ async function handleIncomingMessage(message, contact) {
           }],
         };
         respuesta = null;
-      } else if (texto.includes('Reagendar')) {
+      } else if (texto.includes('Reagendar') || intencionGlobal === 'reagendar_cita') {
         await agenda.setEstadoAgenda(telefono, { ...st, paso: 'seleccionar_dia', esReagenda: true });
         listRespuesta = {
           texto: '🔄 ¿Para qué *nuevo día* quieres reagendar tu cita?',
@@ -456,7 +705,7 @@ async function handleIncomingMessage(message, contact) {
           }],
         };
         respuesta = null;
-      } else if (texto.includes('Cancelar')) {
+      } else if (texto.includes('Cancelar') || intencionGlobal === 'cancelar_cita') {
         respuesta = 'Estás por *cancelar* tu cita.\n\n¿Confirmas la cancelación?';
         botonesRespuesta = { texto: respuesta, botones: ['✅ Sí, cancelar', '❌ No'] };
         respuesta = null;
@@ -522,8 +771,21 @@ async function handleIncomingMessage(message, contact) {
         if (st.leadId && st.leadNombre && st.email) {
           // Cliente existente agendando/reagendando
           const agendado = await agendaReal(st, fecha, hora, nombre, telefono, idioma);
-          await agenda.resetEstadoAgenda(telefono);
-          respuesta = agendado;
+          if (agendado.ok) {
+            await agenda.setEstadoAgenda(telefono, {
+              ...st,
+              paso: 'post_agendado',
+              citaConfirmada: {
+                leadId: st.leadId,
+                fecha,
+                hora,
+                tipoConsulta: st.tipoConsulta || 'Consultoria sin costo',
+                doctorId: st.doctorId || null,
+                doctorNombre: st.doctorNombre || '',
+              },
+            });
+          }
+          respuesta = agendado.message;
         } else {
           // Lead nuevo que se validó con correo
           const email = st.email;
@@ -535,10 +797,26 @@ async function handleIncomingMessage(message, contact) {
             doctorId: st.doctorId,
             tipoConsulta: st.tipoConsulta,
           });
-          await agenda.resetEstadoAgenda(telefono);
-          respuesta = reg.ok
-            ? confirmacionCita(nombre, fecha, hora, st.tipoConsulta, idioma)
-            : 'Parece que ya existe un registro con esos datos. 📋 Agenda aquí: ' + AGENDA_URL;
+          if (reg.ok) {
+            await agenda.setEstadoAgenda(telefono, {
+              ...st,
+              paso: 'post_agendado',
+              leadId: reg.leadId,
+              leadNombre: nombre || 'Paciente',
+              citaConfirmada: {
+                leadId: reg.leadId,
+                fecha,
+                hora,
+                tipoConsulta: st.tipoConsulta || 'Consultoria sin costo',
+                doctorId: st.doctorId || null,
+                doctorNombre: st.doctorNombre || '',
+              },
+            });
+            respuesta = confirmacionCita(nombre, fecha, hora, st.tipoConsulta, idioma);
+          } else {
+            await agenda.resetEstadoAgenda(telefono);
+            respuesta = 'Parece que ya existe un registro con esos datos. 📋 Agenda aquí: ' + AGENDA_URL;
+          }
         }
       } else {
         respuesta = 'Elige un horario de la lista, por ejemplo: "17:00". 🕐';
@@ -549,7 +827,7 @@ async function handleIncomingMessage(message, contact) {
 
     // ── PASO: CONFIRMAR CANCELACIÓN ──
     else if (st.paso === 'confirmar_cancelar') {
-      if (texto.includes('Sí, cancelar') || /^(si|sí|yes)$/i.test(texto.trim())) {
+      if (/(^|,|\s)(si|yes)(,|\s|$).*cancel/.test(normalizarAux(texto)) || /^(si|yes)$/i.test(normalizarAux(texto))) {
         if (st.leadId) {
           await agenda.apiAgendar({ leadId: st.leadId, estado: 'Canceled' }).catch(function(e) {
             console.error('❌ cancelar:', e.message);
@@ -582,7 +860,7 @@ async function handleIncomingMessage(message, contact) {
           await agenda.setEstadoAgenda(telefono, { paso: 'menu_principal' });
           botonesRespuesta = menuPrincipalStemwell(nombre, idioma);
         } else if (intencion === 'hablar_asesor') {
-          respuesta = '¡Entendido! Un asesor de Stemwell te atenderá con gusto. 🙋\n\n📞 Escríbenos o llámanos al *+57 310 406 8755*\n💬 O agenda tu evaluación SIN COSTO: ' + AGENDA_URL + '\n\nUn asesor se comunicará contigo pronto.';
+          respuesta = '¡Entendido! Un asesor de Stemwell te atenderá con gusto. 🙋\n\n📞 Escríbenos o llámanos al *+57 310 406 8755*\n💬 O agenda tu consultoria telefonica sin costo con el medico: ' + AGENDA_URL + '\n\nUn asesor se comunicará contigo pronto.';
         } else {
           // Si no es flujo, usar IA
           respuesta = await responderConIA(texto, nombre, telefono, idioma, sendMessage);
@@ -613,7 +891,7 @@ async function handleIncomingMessage(message, contact) {
 // Función auxiliar: agendar cita para cliente existente (agendar/reagendar)
 async function agendaReal(st, fecha, hora, nombre, telefono, idioma = 'es') {
   const lead = await buscarLeadTrasValidar(telefono, st.email);
-  if (!lead) return '⚠️ No pudimos confirmar tu registro. Intenta de nuevo o agenda aquí: ' + AGENDA_URL;
+  if (!lead) return { ok: false, message: '⚠️ No pudimos confirmar tu registro. Intenta de nuevo o agenda aquí: ' + AGENDA_URL };
   try {
     await agenda.apiAgendar({
       leadId: lead.id,
@@ -625,11 +903,11 @@ async function agendaReal(st, fecha, hora, nombre, telefono, idioma = 'es') {
       tipoConsulta: st.tipoConsulta || 'Consultoria sin costo',
       notas: 'Cita ' + (st.esReagenda ? 'REAGENDADA' : 'AGENDADA') + ' por bot de WhatsApp - actualizar en Medilink.',
     });
-    return confirmacionCita(lead.nombre || nombre, fecha, hora, st.tipoConsulta, idioma);
+    return { ok: true, message: confirmacionCita(lead.nombre || nombre, fecha, hora, st.tipoConsulta, idioma) };
   } catch (e) {
     console.error('❌ agendaReal:', e.message);
-    return 'Tuvimos un problema al registrar tu cita. 🙏 Agenda aquí: ' + AGENDA_URL;
+    return { ok: false, message: 'Tuvimos un problema al registrar tu cita. 🙏 Agenda aquí: ' + AGENDA_URL };
   }
 }
 
-module.exports = { handleIncomingMessage };
+module.exports = { handleIncomingMessage, esNotificacionFormularioCampana, telefonoWhatsAppValido, respuestaMedicaSegura };

@@ -10,8 +10,19 @@ const HEADERS = () => ({
   'Content-Type': 'application/json',
 });
 
+function normalizarDestino(to) {
+  const telefono = String(to || '').replace(/\D/g, '');
+  if (!/^\d{8,15}$/.test(telefono)) {
+    console.error('ENVIO_WHATSAPP_BLOQUEADO: destinatario ausente o invalido');
+    return '';
+  }
+  return telefono;
+}
+
 // ── Texto simple ─────────────────────────────────────────
 async function sendMessage(to, text, reintentos = 2) {
+  to = normalizarDestino(to);
+  if (!to) return false;
   for (let intento = 0; intento <= reintentos; intento++) {
     try {
       await axios.post(BASE_URL, {
@@ -51,6 +62,8 @@ function isTransientError(error) {
 // WhatsApp SOLO permite 3 botones. Si pasas más, usa sendList.
 // Devuelve true si se envió con botones interactivos, false si se usó fallback.
 async function sendButtons(to, bodyText, buttons = []) {
+  to = normalizarDestino(to);
+  if (!to) return false;
   // Limitar a 3 y truncar títulos a 20 chars
   const safeButtons = buttons.slice(0, 3).map((btn, i) => ({
     type:  'reply',
@@ -87,6 +100,8 @@ async function sendButtons(to, bodyText, buttons = []) {
 // Úsala cuando tengas más de 3 opciones.
 // sections = [{ title: 'Sección', rows: [{ id, title, description? }] }]
 async function sendList(to, bodyText, buttonLabel, sections) {
+  to = normalizarDestino(to);
+  if (!to) return false;
   // Validar y truncar
   const safeSections = sections.map(s => ({
     title: String(s.title || '').slice(0, 24),
@@ -120,4 +135,4 @@ async function sendList(to, bodyText, buttonLabel, sections) {
   }
 }
 
-module.exports = { sendMessage, sendButtons, sendList };
+module.exports = { sendMessage, sendButtons, sendList, normalizarDestino };

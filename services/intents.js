@@ -16,26 +16,27 @@ function normalizar(texto) {
 // Intención: agendar una cita (nueva)
 function esAgendar(texto) {
   const t = normalizar(texto);
-  return /(quiero|necesito|me gustaria|quisiera|deseo|puedo|queria|debo).*(agendar|agenda|cita|reservar|apartar|programar|registrar)/.test(t) ||
-         /(agendar|cita|citas).*(por favor|hoy|manana|semana|asi|medio|virtual|presencial)?/.test(t) && /(agenda|cita|agendar|reservar)/.test(t) && !/(cancel|cancelar|anular|reagend|reprogramar)/.test(t);
+  const verbo = /(agendar|agendrar|agewndar|agenwdar|reservar|apartar|programar|schedule|book)/;
+  return /(quiero|necesito|me gustaria|quisiera|deseo|puedo|queria|debo|i want|i need|i would like).*(agendar|agendrar|agewndar|agenwdar|agenda|cita|reservar|apartar|programar|schedule|book)/.test(t) ||
+         (verbo.test(t) || /^(cita|citas|appointment|appointments)$/.test(t)) && !/(cancel|anular|reagend|regaend|reprogram|reschedul)/.test(t);
 }
 
 // Intención: cancelar una cita
 function esCancelar(texto) {
   const t = normalizar(texto);
-  return /(cancelar|cancel|cancelacion|anular|no podre|no voy a poder|no asistire|eliminar cita)/.test(t);
+  return /(cancelar|canselar|cancel|cancelacion|anular|no podre|no voy a poder|no asistire|eliminar cita)/.test(t);
 }
 
 // Intención: reagendar / reprogramar una cita
 function esReagendar(texto) {
   const t = normalizar(texto);
-  return /(reagendar|reprogramar|cambiar.*(fecha|hora|cita)|posponer|cambiar mi cita|mover.*cita)/.test(t);
+  return /(reagendar|regaendar|reagendrar|reprogramar|reschedule|rescheduling|cambiar.*(fecha|hora|cita)|posponer|cambiar mi cita|mover.*cita)/.test(t);
 }
 
 // Intención: consultar disponibilidad
 function esConsultarDisponibilidad(texto) {
   const t = normalizar(texto);
-  return /(disponibilidad|horarios|horario|dias disponibles|que dias|a que hora|que horas|agenda disponible|tienen cupo|tienen espacio|tienen turno)/.test(t);
+  return /(disponibilidad|availability|horarios|horario|available time|available day|dias disponibles|que dias|a que hora|que horas|agenda disponible|tienen cupo|tienen espacio|tienen turno)/.test(t);
 }
 
 // Intención: hablar con un asesor humano

@@ -478,6 +478,11 @@ async function getUltimoContexto(telefono) {
 // Permiten que el flujo de agenda / sesión sobreviva reinicios del bot.
 // ═══════════════════════════════════════════════════════════════════════════
 async function guardarEstado(telefono, estado, tipo = 'agenda') {
+  telefono = normalizarTelefono(telefono);
+  if (!/^\d{8,15}$/.test(telefono)) {
+    console.warn('[guardarEstado] Estado ignorado: telefono ausente o invalido');
+    return false;
+  }
   try {
     await pool.query(
       `INSERT INTO wa_estados (telefono, tipo, estado, actualizado)

@@ -14,6 +14,16 @@ const { initHumanControl, processOutbox } = require('./services/human-control');
 const app = express();
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 const PORT = process.env.PORT || 3000;
+const processedMessageIds = new Map();
+
+function isDuplicateMessage(messageId) {
+  if (!messageId) return false;
+  if (processedMessageIds.has(messageId)) return true;
+  processedMessageIds.set(messageId, Date.now());
+  const cleanup = setTimeout(() => processedMessageIds.delete(messageId), 10 * 60 * 1000);
+  if (typeof cleanup.unref === 'function') cleanup.unref();
+  return false;
+}
 
 // ============================================
 // CAPTURA DE ERRORES GLOBALES (evita que el
@@ -371,13 +381,22 @@ app.post('/webhook', (req, res) => {
   const body = req.body;
 
   if (body.object === 'whatsapp_business_account') {
-    const message = body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
-    const contact = body.entry?.[0]?.changes?.[0]?.value?.contacts?.[0];
-    
-        if (message && contact) {
-      handleIncomingMessage(message, contact).catch((err) => {
-        console.error('❌ Error procesando mensaje:', err?.message || err);
-      });
+    for (const entry of body.entry || []) {
+      for (const change of entry.changes || []) {
+        const value = change.value || {};
+        const contacts = value.contacts || [];
+        for (const message of value.messages || []) {
+          if (isDuplicateMessage(message.id)) {
+            console.log(`WHATSAPP_DUPLICATE_IGNORED ${message.id}`);
+            continue;
+          }
+          const contact = contacts.find(item => String(item.wa_id || '') === String(message.from || ''))
+            || { wa_id: message.from, profile: {} };
+          handleIncomingMessage(message, contact).catch((err) => {
+            console.error('❌ Error procesando mensaje:', err?.message || err);
+          });
+        }
+      }
     }
   }
   res.sendStatus(200);

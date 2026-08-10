@@ -29,21 +29,23 @@ async function buscarLead({ pool, telefono, email }) {
       const t = normalizarTelefono(telefono);
       if (t.length >= 8) {
         params.push(`%${t}`);
-        where.push(`regexp_replace(coalesce(telefono,''),'[^0-9]','','g') LIKE $${params.length}`);
+        where.push(`regexp_replace(coalesce(l.telefono,''),'[^0-9]','','g') LIKE $${params.length}`);
       }
     }
     if (email && /@/.test(email)) {
       params.push(email.trim());
-      where.push(`lower(email) = lower($${params.length})`);
+      where.push(`lower(trim(l.email)) = lower(trim($${params.length}))`);
     }
     if (!where.length) return [];
     const result = await pool.query(
-      `SELECT id, nombre, telefono, email, doctor_id, doctor_nombre,
-              sales_status, appointment_status, medical_status,
-              treatment_date, treatment_start_date, modalidad_consulta
-       FROM leads
+      `SELECT l.id, l.nombre, l.telefono, l.email, l.doctor_id,
+              d.nombre AS doctor_nombre,
+              l.sales_status, l.appointment_status, l.medical_status,
+              l.treatment_date, l.treatment_start_date, l.modalidad_consulta
+       FROM leads l
+       LEFT JOIN usuarios d ON d.id = l.doctor_id
        WHERE ${where.join(' OR ')}
-       ORDER BY fecha_actualizacion DESC NULLS LAST
+       ORDER BY l.fecha_actualizacion DESC NULLS LAST
        LIMIT 5`,
       params
     );
