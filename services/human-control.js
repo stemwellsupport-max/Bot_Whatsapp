@@ -32,29 +32,46 @@ async function isPaused(telefono) {
 
 async function processOutbox() {
   const client = await pool.connect();
+  let items = [];
   try {
+    // Claim pending messages in a short transaction. Never keep database
+    // locks open while waiting for Meta/WhatsApp or while writing the chat log
+    // through another pooled connection.
     await client.query('BEGIN');
     const result = await client.query(`
       SELECT id,telefono,mensaje FROM wa_outbox
       WHERE status='pending' ORDER BY created_at,id
       FOR UPDATE SKIP LOCKED LIMIT 10
     `);
-    for (const item of result.rows) {
+    items = result.rows;
+    for (const item of items) {
       await client.query("UPDATE wa_outbox SET status='sending',error=NULL WHERE id=$1", [item.id]);
-      const sent = await sendMessage(item.telefono, item.mensaje, 1);
-      if (sent) {
-        await client.query("UPDATE wa_outbox SET status='sent',sent_at=NOW() WHERE id=$1", [item.id]);
-        await logMensaje(item.telefono, 'Equipo Stemwell', 'salida', item.mensaje);
-      } else {
-        await client.query("UPDATE wa_outbox SET status='pending',error='WhatsApp API no confirmo el envio' WHERE id=$1", [item.id]);
-      }
     }
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('[wa_outbox]', error.message);
+    return;
   } finally {
     client.release();
+  }
+
+  for (const item of items) {
+    try {
+      const sent = await sendMessage(item.telefono, item.mensaje, 1);
+      if (sent) {
+        await pool.query("UPDATE wa_outbox SET status='sent',sent_at=NOW() WHERE id=$1", [item.id]);
+        await logMensaje(item.telefono, 'Equipo Stemwell', 'salida', item.mensaje);
+      } else {
+        await pool.query("UPDATE wa_outbox SET status='pending',error='WhatsApp API no confirmo el envio' WHERE id=$1", [item.id]);
+      }
+    } catch (error) {
+      await pool.query(
+        "UPDATE wa_outbox SET status='pending',error=$2 WHERE id=$1",
+        [item.id, String(error.message || error).slice(0, 1000)]
+      ).catch(() => {});
+      console.error(`[wa_outbox:${item.id}]`, error.message || error);
+    }
   }
 }
 
