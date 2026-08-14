@@ -9,7 +9,10 @@ const { handleIncomingMessage } = require('./commands/handlers');
 const { initDB } = require('./services/postgres');
 const { initDB: initAgendaDB } = require('./services/agenda');
 const adminRouter = require('./admin/router');
-const { initHumanControl, processOutbox } = require('./services/human-control');
+const {
+  initHumanControl, processOutbox, claimResumedMessages,
+  completeResumedMessage, releaseResumedMessage,
+} = require('./services/human-control');
 
 const app = express();
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
@@ -416,6 +419,22 @@ async function start() {
     await initAgendaDB();
     await initHumanControl();
     setInterval(() => processOutbox().catch(err => console.error('âŒ Outbox:', err.message)), 2000);
+    setInterval(async () => {
+      const pending = await claimResumedMessages();
+      for (const item of pending) {
+        try {
+          await handleIncomingMessage(
+            { from: item.telefono, type: 'text', text: { body: item.mensaje } },
+            { wa_id: item.telefono, profile: { name: item.nombre } },
+            { skipInboundLog: true },
+          );
+          await completeResumedMessage(item.telefono);
+        } catch (err) {
+          console.error('âŒ Error retomando conversacion:', err?.message || err);
+          await releaseResumedMessage(item.telefono);
+        }
+      }
+    }, 3000);
     app.listen(PORT, () => {
       console.log(`🚀 Stemwell Bot corriendo en puerto ${PORT}`);
       console.log(`📡 Webhook: http://localhost:${PORT}/webhook`);

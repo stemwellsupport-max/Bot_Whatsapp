@@ -11,7 +11,7 @@ const { responderConIA, detectarIdioma } = require('../services/ia-local');
 const { detectarIntencion } = require('../services/intents');
 const agenda = require('../services/agenda');
 const identidad = require('../services/identidad');
-const { isPaused } = require('../services/human-control');
+const { isPaused, savePendingInbound, requestAdvisor } = require('../services/human-control');
 
 // Pool reusado desde postgres.js para consultas de lectura
 const { pool } = require('../services/postgres');
@@ -45,6 +45,17 @@ function esNotificacionFormularioCampana(texto) {
 function pausaNatural() {
   const ms = Math.floor(Math.random() * 800) + 400;
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function agregarOpcionesContacto(respuesta, idioma) {
+  const texto = String(respuesta || '');
+  const normalizado = normalizarAux(texto);
+  const yaInvitaAgendar = /(agendar|agenda|book.*appointment|schedule.*appointment)/.test(normalizado);
+  const yaInvitaAsesor = /(hablar.*asesor|asesor.*contact|speak.*advisor|advisor.*contact)/.test(normalizado);
+  if (yaInvitaAgendar && yaInvitaAsesor) return texto;
+  return texto + (idioma === 'en'
+    ? '\n\nWould you like to *book an appointment* or *speak to an advisor*?'
+    : '\n\n¿Te gustaría *agendar una cita* o *hablar con un asesor*?');
 }
 
 const DIAS_ES = ['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];
@@ -181,12 +192,12 @@ function menuPrincipalStemwell(nombre, idioma = 'es') {
   if (idioma === 'en') {
     return {
       texto: 'Hello' + (nombre ? ' ' + nombre : '') + '! I am Sofia, the Stemwell virtual assistant. How can I help you?',
-      botones: ['About Stemwell', 'Book appointment', 'Reception'],
+      botones: ['About Stemwell', 'Book appointment', 'Speak to an advisor'],
     };
   }
   return {
     texto: 'Hola' + (nombre ? ' ' + nombre : '') + '. Soy Sofia, asistente virtual de Stemwell. Como puedo ayudarte?',
-    botones: ['Conocer Stemwell', 'Agendar cita', 'Recepcion'],
+    botones: ['Conocer Stemwell', 'Agendar cita', 'Hablar con un asesor'],
   };
 }
 
@@ -438,7 +449,7 @@ async function registrarLeadNuevo({ nombre, telefono, email, fecha, hora, doctor
   }
 }
 
-async function handleIncomingMessage(message, contact) {
+async function handleIncomingMessage(message, contact, options = {}) {
   const telefono = telefonoWhatsAppValido(message?.from || contact?.wa_id);
   const nombre = contact?.profile?.name || '';
   const tipo = message.type;
@@ -474,13 +485,14 @@ async function handleIncomingMessage(message, contact) {
   console.log('📩 [' + telefono + '] ' + nombre + ': "' + texto + '" (' + idioma + ')');
 
   await upsertContactoBasico(telefono, nombre).catch(function(){});
-  await logMensaje(telefono, nombre, 'entrada', texto);
+  if (!options.skipInboundLog) await logMensaje(telefono, nombre, 'entrada', texto);
   await setSesion(telefono, { mensajes: (sesion.mensajes || 0) + 1, idioma: idioma });
 
   // Cuando recepcion toma el chat desde el CRM, conservamos el historial pero
   // detenemos por completo las respuestas automaticas para evitar duplicados.
   if (await isPaused(telefono)) {
     console.log('[' + telefono + '] Conversacion bajo control humano');
+    await savePendingInbound(telefono, nombre, texto);
     return;
   }
 
@@ -505,6 +517,12 @@ async function handleIncomingMessage(message, contact) {
     else if (/^(gracias|muchas gracias|thanks|thank you|listo)$/.test(textoGlobal)) {
       await agenda.resetEstadoAgenda(telefono);
       respuesta = idioma === 'en' ? 'You are welcome. I am here whenever you need us.' : 'Con gusto. Estoy aqui cuando nos necesites.';
+    }
+    else if (intencionGlobal === 'hablar_asesor') {
+      const advisor = await requestAdvisor(telefono, nombre, idioma, texto);
+      respuesta = idioma === 'en'
+        ? (advisor ? `I am connecting you with ${advisor.nombre}. They will contact you as soon as possible.` : 'We are looking for an available advisor. We will contact you as soon as possible.')
+        : (advisor ? `Te estoy conectando con ${advisor.nombre}. Se comunicará contigo lo más pronto posible.` : 'Estamos buscando un asesor disponible. Nos comunicaremos contigo lo más pronto posible.');
     }
     else if (st.paso && st.paso !== 'menu_principal' && /^(hola|hello|hey|buenas|buenos dias|buenas tardes)$/.test(textoGlobal)) {
       respuesta = (idioma === 'en' ? 'Hello! We can continue whenever you are ready.' : 'Hola. Podemos continuar cuando quieras.') + pistaParaRetomar(st, idioma);
@@ -869,6 +887,10 @@ async function handleIncomingMessage(message, contact) {
     }
 
     // ═══ ENVÍO DE RESPUESTA (texto, botones o lista) ═══
+    const pasosAgenda = ['pedir_tipo','pedir_doctor','pedir_correo','validado','validado_nuevo','seleccionar_dia','seleccionar_hora','confirmar_cancelar','post_agendado'];
+    if (respuesta && !pasosAgenda.includes(st.paso) && intencionGlobal !== 'hablar_asesor') {
+      respuesta = agregarOpcionesContacto(respuesta, idioma);
+    }
     if (botonesRespuesta && botonesRespuesta.botones && botonesRespuesta.botones.length > 0) {
       await pausaNatural();
       await sendButtons(telefono, botonesRespuesta.texto, botonesRespuesta.botones);
