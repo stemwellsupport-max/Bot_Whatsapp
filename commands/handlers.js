@@ -11,7 +11,7 @@ const { responderConIA, detectarIdioma } = require('../services/ia-local');
 const { detectarIntencion } = require('../services/intents');
 const agenda = require('../services/agenda');
 const identidad = require('../services/identidad');
-const { isPaused, savePendingInbound, requestAdvisor } = require('../services/human-control');
+const { isPaused, savePendingInbound, requestAdvisor, isBusinessHours } = require('../services/human-control');
 
 // Pool reusado desde postgres.js para consultas de lectura
 const { pool } = require('../services/postgres');
@@ -519,10 +519,20 @@ async function handleIncomingMessage(message, contact, options = {}) {
       respuesta = idioma === 'en' ? 'You are welcome. I am here whenever you need us.' : 'Con gusto. Estoy aqui cuando nos necesites.';
     }
     else if (intencionGlobal === 'hablar_asesor') {
-      const advisor = await requestAdvisor(telefono, nombre, idioma, texto);
-      respuesta = idioma === 'en'
-        ? (advisor ? `I am connecting you with ${advisor.nombre}. They will contact you as soon as possible.` : 'We are looking for an available advisor. We will contact you as soon as possible.')
-        : (advisor ? `Te estoy conectando con ${advisor.nombre}. Se comunicará contigo lo más pronto posible.` : 'Estamos buscando un asesor disponible. Nos comunicaremos contigo lo más pronto posible.');
+      const dentroDeHorario = isBusinessHours();
+      const advisor = await requestAdvisor(telefono, nombre, idioma, texto, { pauseBot: dentroDeHorario });
+      if (dentroDeHorario) {
+        respuesta = idioma === 'en'
+          ? (advisor ? `I am connecting you with ${advisor.nombre}. They will contact you as soon as possible.` : 'We are looking for an available advisor. We will contact you as soon as possible.')
+          : (advisor ? `Te estoy conectando con ${advisor.nombre}. Se comunicará contigo lo más pronto posible.` : 'Estamos buscando un asesor disponible. Nos comunicaremos contigo lo más pronto posible.');
+      } else {
+        // No advisor is staffing the chat right now. Queue the request for
+        // the morning, but keep Sofía active instead of going silent.
+        respuesta = idioma === 'en'
+          ? 'Our advisors are available from 8:30 AM to 6:00 PM. I have noted your request and someone will reach out as soon as that window opens. In the meantime I can answer questions, or help you book, reschedule or cancel an appointment.'
+          : 'Nuestros asesores atienden de 8:30 a.m. a 6:00 p.m. Ya dejé registrada tu solicitud y alguien te va a contactar apenas empiece ese horario. Mientras tanto puedo resolver dudas, o ayudarte a agendar, reagendar o cancelar una cita.';
+        await agenda.setEstadoAgenda(telefono, { paso: 'menu_principal' });
+      }
     }
     else if (st.paso && st.paso !== 'menu_principal' && /^(hola|hello|hey|buenas|buenos dias|buenas tardes)$/.test(textoGlobal)) {
       respuesta = (idioma === 'en' ? 'Hello! We can continue whenever you are ready.' : 'Hola. Podemos continuar cuando quieras.') + pistaParaRetomar(st, idioma);

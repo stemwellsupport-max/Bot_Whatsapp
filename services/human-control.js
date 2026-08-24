@@ -48,7 +48,20 @@ async function initHumanControl() {
   await pool.query("UPDATE wa_outbox SET status='pending',error='Recovered after interrupted send' WHERE status='sending' AND created_at < NOW() - INTERVAL '5 minutes'");
 }
 
-async function requestAdvisor(telefono, nombre, idioma, mensaje) {
+// Advisors staff the chat 8:30 AM to 6:00 PM, Bogota time, every day.
+// Outside that window nobody is watching a paused/handed-off conversation,
+// so the bot must keep answering instead of going silent until morning.
+function isBusinessHours(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(date);
+  const hour = Number(parts.find(p => p.type === 'hour').value);
+  const minute = Number(parts.find(p => p.type === 'minute').value);
+  const minutesSinceMidnight = hour * 60 + minute;
+  return minutesSinceMidnight >= (8 * 60 + 30) && minutesSinceMidnight < (18 * 60);
+}
+
+async function requestAdvisor(telefono, nombre, idioma, mensaje, { pauseBot = true } = {}) {
   // Reparte por carga entre los asesores activos que puedan atender el idioma.
   const language = idioma === 'en' ? 'english' : 'spanish';
   const advisor = await pool.query(`
@@ -69,12 +82,16 @@ async function requestAdvisor(telefono, nombre, idioma, mensaje) {
       nombre=EXCLUDED.nombre,idioma=EXCLUDED.idioma,mensaje=EXCLUDED.mensaje,
       asesor_id=EXCLUDED.asesor_id,estado='pending',requested_at=NOW(),taken_at=NULL
   `, [telefono, nombre || 'Paciente', language, mensaje || '', selected?.id || null]);
-  await pool.query(`
-    INSERT INTO wa_handoffs (telefono,paused,paused_by,paused_at,updated_at)
-    VALUES ($1,TRUE,$2,NOW(),NOW())
-    ON CONFLICT (telefono) DO UPDATE SET paused=TRUE,paused_by=EXCLUDED.paused_by,
-      paused_at=NOW(),updated_at=NOW()
-  `, [telefono, selected?.id || null]);
+  // Outside business hours the request still gets queued for the morning,
+  // but the bot must not go silent, so it stays unpaused.
+  if (pauseBot) {
+    await pool.query(`
+      INSERT INTO wa_handoffs (telefono,paused,paused_by,paused_at,updated_at)
+      VALUES ($1,TRUE,$2,NOW(),NOW())
+      ON CONFLICT (telefono) DO UPDATE SET paused=TRUE,paused_by=EXCLUDED.paused_by,
+        paused_at=NOW(),updated_at=NOW()
+    `, [telefono, selected?.id || null]);
+  }
   return selected;
 }
 
@@ -175,5 +192,5 @@ async function processOutbox() {
 module.exports = {
   initHumanControl, isPaused, processOutbox,
   savePendingInbound, claimResumedMessages, completeResumedMessage, releaseResumedMessage,
-  requestAdvisor,
+  requestAdvisor, isBusinessHours,
 };
