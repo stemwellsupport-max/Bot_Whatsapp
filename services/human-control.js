@@ -16,11 +16,13 @@ async function initHumanControl() {
       telefono VARCHAR(30) NOT NULL,
       mensaje TEXT NOT NULL,
       status VARCHAR(20) NOT NULL DEFAULT 'pending',
+      intentos INTEGER NOT NULL DEFAULT 0,
       created_by INTEGER,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       sent_at TIMESTAMP,
       error TEXT
     )`);
+  await pool.query('ALTER TABLE wa_outbox ADD COLUMN IF NOT EXISTS intentos INTEGER NOT NULL DEFAULT 0');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_wa_outbox_pending ON wa_outbox(status, created_at)');
   await pool.query(`
     CREATE TABLE IF NOT EXISTS wa_bot_pending_inbound (
@@ -144,6 +146,12 @@ async function releaseResumedMessage(telefono) {
   await pool.query('UPDATE wa_bot_pending_inbound SET replaying_at=NULL WHERE telefono=$1', [telefono]);
 }
 
+// Tras agotar los reintentos dejamos el mensaje en 'failed' en vez de
+// reintentarlo para siempre: un error de parametro invalido de Meta (ej.
+// #131009, texto libre fuera de la ventana de 24h) nunca se va a resolver
+// solo, y reintentar cada 2s satura el log y desperdicia llamadas a la API.
+const MAX_INTENTOS_OUTBOX = 5;
+
 async function processOutbox() {
   const client = await pool.connect();
   let items = [];
@@ -153,7 +161,7 @@ async function processOutbox() {
     // through another pooled connection.
     await client.query('BEGIN');
     const result = await client.query(`
-      SELECT id,telefono,mensaje FROM wa_outbox
+      SELECT id,telefono,mensaje,intentos FROM wa_outbox
       WHERE status='pending' ORDER BY created_at,id
       FOR UPDATE SKIP LOCKED LIMIT 10
     `);
@@ -177,16 +185,22 @@ async function processOutbox() {
         await pool.query("UPDATE wa_outbox SET status='sent',sent_at=NOW() WHERE id=$1", [item.id]);
         await logMensaje(item.telefono, 'Equipo Stemwell', 'salida', item.mensaje);
       } else {
-        await pool.query("UPDATE wa_outbox SET status='pending',error='WhatsApp API no confirmo el envio' WHERE id=$1", [item.id]);
+        await marcarReintentoOFallo(item.id, item.intentos, 'WhatsApp API no confirmo el envio');
       }
     } catch (error) {
-      await pool.query(
-        "UPDATE wa_outbox SET status='pending',error=$2 WHERE id=$1",
-        [item.id, String(error.message || error).slice(0, 1000)]
-      ).catch(() => {});
+      await marcarReintentoOFallo(item.id, item.intentos, String(error.message || error).slice(0, 1000));
       console.error(`[wa_outbox:${item.id}]`, error.message || error);
     }
   }
+}
+
+async function marcarReintentoOFallo(id, intentosPrevios, mensajeError) {
+  const intentos = (intentosPrevios || 0) + 1;
+  const status = intentos >= MAX_INTENTOS_OUTBOX ? 'failed' : 'pending';
+  await pool.query(
+    'UPDATE wa_outbox SET status=$2,intentos=$3,error=$4 WHERE id=$1',
+    [id, status, intentos, mensajeError]
+  ).catch(() => {});
 }
 
 module.exports = {

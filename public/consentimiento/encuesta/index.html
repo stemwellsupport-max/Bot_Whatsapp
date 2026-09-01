@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title id="page-title">Encuesta de Satisfacción · Stemwell</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --verde: #00B2C2; --verde-claro: #E6F7F9; --texto: #1C2B26; --gris: #6B7B76;
+    --borde: #D4E6DF; --fondo: #F7FAF8; --blanco: #FFFFFF; --error: #C0392B; --max-w: 560px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Poppins', sans-serif; background: var(--fondo); color: var(--texto); min-height: 100vh; }
+  .header { background: var(--blanco); border-bottom: 1px solid var(--borde); padding: 10px 24px; display: flex; align-items: center; position: sticky; top: 0; z-index: 10; }
+  .header img { height: 54px; width: auto; }
+  .container { max-width: var(--max-w); margin: 0 auto; padding: 14px 20px 18px; }
+  @media (min-width: 700px) { :root { --max-w: 680px; } }
+  @media (min-width: 1000px) { :root { --max-w: 900px; } }
+  @media (min-width: 1300px) { :root { --max-w: 1100px; } }
+  .titulo-simple { margin-bottom: clamp(12px, 1.4vh, 18px); }
+  .titulo-simple h2 { font-size: clamp(20px, 2.6vw, 28px); font-weight: 800; color: var(--verde); margin-bottom: 6px; }
+  .titulo-simple p { font-size: clamp(13px, 1vw, 15px); color: var(--gris); line-height: 1.4; }
+  /* Paso 1 (identificación + procedimiento) tiene bastante margen, así que
+     estas secciones sí crecen en pantallas altas. El paso 2 (calificaciones
+     en píldoras) ya está muy ajustado para caber sin scroll, así que sus
+     secciones (.paso2-grid) mantienen su tamaño fijo más abajo. */
+  .section { background: var(--blanco); border-radius: 16px; padding: clamp(16px, 2.4vh, 28px) clamp(18px, 1.8vw, 24px); margin-bottom: clamp(10px, 1.6vh, 16px); border: 1px solid var(--borde); }
+  .section-title { font-size: clamp(13.5px, 1vw, 15px); font-weight: 600; color: var(--texto); margin-bottom: clamp(10px, 1.6vh, 16px); line-height: 1.4; }
+  .section-title span.req { color: var(--verde); margin-left: 2px; }
+  .field { margin-bottom: clamp(12px, 1.8vh, 18px); }
+  .field:last-child { margin-bottom: 0; }
+  label.campo-label { display: block; font-size: 12.5px; font-weight: 500; color: var(--gris); margin-bottom: 6px; }
+  input[type="text"], input[type="date"], textarea {
+    width: 100%; padding: clamp(12px, 1.7vh, 17px) 15px; border: 1.5px solid var(--borde); border-radius: 11px;
+    font-family: 'Poppins', sans-serif; font-size: clamp(14px, 1vw, 16px); color: var(--texto); background: var(--fondo);
+    transition: border-color .2s, box-shadow .2s; -webkit-appearance: none;
+  }
+  textarea { resize: vertical; min-height: 80px; }
+  input:focus, textarea:focus { outline: none; border-color: var(--verde); box-shadow: 0 0 0 3px rgba(0,178,194,.12); background: var(--blanco); }
+  input.error, textarea.error { border-color: var(--error); }
+  .field-error { font-size: 11.5px; color: var(--error); margin-top: 4px; display: none; }
+  .field-error.show { display: block; }
+
+  /* Lista de procedimientos: sin orden que importe, así que en pantallas
+     anchas se muestra en 2 columnas para no ocupar tanto alto. */
+  #grupo-procedimientos { display: grid; grid-template-columns: 1fr; gap: 9px; }
+  @media (min-width: 640px) { #grupo-procedimientos { grid-template-columns: 1fr 1fr; } }
+  #grupo-procedimientos .otro-campo { grid-column: 1 / -1; }
+  .opcion-wrap {
+    display: flex; align-items: flex-start; gap: 11px; padding: 10px 14px; border-radius: 11px;
+    border: 1.5px solid var(--borde); cursor: pointer; transition: border-color .2s, background .2s;
+  }
+  .opcion-wrap:hover { border-color: var(--verde); background: var(--verde-claro); }
+  .marca { width: 21px; height: 21px; flex-shrink: 0; border: 2px solid var(--borde); background: var(--blanco); transition: all .2s; margin-top: 1px; }
+  .marca.cuadrada { border-radius: 6px; }
+  .opcion-wrap.checked .marca { background: var(--verde); border-color: var(--verde); position: relative; }
+  .opcion-wrap.checked .marca.cuadrada::after { content: ''; width: 6px; height: 10px; border: 2px solid white; border-top: none; border-left: none; transform: rotate(45deg) translate(6px,2px); display: block; }
+  .opcion-texto { font-size: 13.5px; line-height: 1.5; color: var(--texto); }
+  .otro-campo { margin-top: 8px; margin-left: 34px; display: none; }
+  .otro-campo.show { display: block; }
+
+  /* Escalas de calificación: una fila horizontal de píldoras en vez de una
+     lista vertical larga — así cada pregunta ocupa mucho menos alto y las
+     5 escalas + comentarios caben en una sola pantalla sin scroll. */
+  .pill-fila { display: flex; flex-wrap: wrap; gap: 7px; }
+  .pill-opcion {
+    padding: 8px 13px; border-radius: 20px; border: 1.5px solid var(--borde); background: var(--blanco);
+    font-family: 'Poppins', sans-serif; font-size: 12px; font-weight: 500; color: var(--texto);
+    cursor: pointer; transition: all .15s; user-select: none; white-space: nowrap;
+  }
+  .pill-opcion:hover { border-color: var(--verde); background: var(--verde-claro); }
+  .pill-opcion.checked { background: var(--verde); border-color: var(--verde); color: white; }
+  /* Las 5 preguntas de calificación en 2 columnas para que quepan sin
+     scroll junto con los comentarios. */
+  .paso2-grid { display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 8px; }
+  .paso2-grid .section { margin-bottom: 0; padding: 12px 16px; }
+  .paso2-grid .section-title { margin-bottom: 8px; font-size: 12.5px; }
+  @media (min-width: 640px) { .paso2-grid { grid-template-columns: 1fr 1fr; } }
+
+  .btn-enviar {
+    width: 100%; padding: 16px; background: var(--verde); color: white; border: none; border-radius: 14px;
+    font-family: 'Poppins', sans-serif; font-size: 16.5px; font-weight: 600; cursor: pointer; transition: all .2s;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+  }
+  .btn-enviar:hover:not(:disabled) { background: #0093a0; transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,178,194,.3); }
+  .btn-enviar:disabled { opacity: .6; cursor: not-allowed; }
+  .btn-secundario {
+    padding: 14px 22px; background: none; color: var(--gris); border: 1.5px solid var(--borde); border-radius: 14px;
+    font-family: 'Poppins', sans-serif; font-size: 14.5px; font-weight: 500; cursor: pointer; transition: all .2s; white-space: nowrap;
+  }
+  .btn-secundario:hover { border-color: var(--verde); color: var(--verde); }
+  .spinner { width: 20px; height: 20px; border: 2px solid rgba(255,255,255,.3); border-top-color: white; border-radius: 50%; animation: spin .7s linear infinite; display: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Los 2 pasos de la encuesta: cada uno usa toda la pantalla y aparece
+     con una transición suave (fundido + deslizamiento) en vez de golpe seco. */
+  .paso-encuesta { display: none; }
+  .paso-encuesta.activo { display: block; animation: paso-entrada .35s ease; }
+  @keyframes paso-entrada { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  .botones-paso { display: flex; gap: 12px; margin-top: 6px; }
+  .botones-paso .btn-enviar { flex: 1; }
+
+  #pantalla-exito, #pantalla-resenas { display: none; flex-direction: column; align-items: center; text-align: center; padding: 60px 24px; }
+  .exito-icono { width: 80px; height: 80px; background: var(--verde-claro); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 22px; }
+  .exito-icono svg { width: 40px; height: 40px; }
+  #pantalla-exito h2, #pantalla-resenas h2 { font-size: 24px; color: var(--verde); margin-bottom: 10px; font-weight: 700; }
+  #pantalla-exito p { font-size: 14.5px; color: var(--gris); line-height: 1.65; max-width: 360px; }
+  #pantalla-exito .exito-redirect-nota { font-size: 12.5px; color: var(--gris); margin-top: 20px; }
+  .google-logo { width: 56px; height: 56px; margin-bottom: 14px; }
+  .exito-qr-bloque { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .exito-qr-bloque img { width: 340px; height: 340px; border-radius: 16px; border: 1.5px solid var(--borde); padding: 12px; background: var(--blanco); }
+  .exito-qr-bloque span { font-size: 13px; color: var(--gris); max-width: 300px; line-height: 1.4; }
+</style>
+</head>
+<body>
+
+<header class="header"><img src="/images/STEMWELL_LOGO_.png" alt="Stemwell" /></header>
+
+<div class="container">
+  <div id="pantalla-form">
+    <div class="titulo-simple">
+      <h2 id="txt-titulo">&nbsp;</h2>
+      <p id="txt-intro"></p>
+    </div>
+
+    <div id="paso-1" class="paso-encuesta activo">
+      <div id="campos-paso1"></div>
+      <div class="botones-paso">
+        <button class="btn-secundario" id="btn-paso1-inicio" type="button"></button>
+        <button class="btn-enviar" id="btn-paso1-siguiente" type="button"><span id="txt-siguiente"></span></button>
+      </div>
+    </div>
+
+    <div id="paso-2" class="paso-encuesta">
+      <div id="campos-paso2"></div>
+      <div class="botones-paso">
+        <button class="btn-secundario" id="btn-paso2-volver" type="button"><span id="txt-volver-paso"></span></button>
+        <button class="btn-enviar" id="btn-enviar" type="button">
+          <span id="btn-texto">Enviar</span>
+          <div class="spinner" id="spinner"></div>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="pantalla-resenas">
+    <svg class="google-logo" viewBox="0 0 48 48" aria-hidden="true">
+      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.9-2.26 5.36-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+    </svg>
+    <h2 id="txt-resenas-titulo"></h2>
+    <div class="exito-qr-bloque">
+      <img id="img-qr-encuesta" src="" alt="QR" />
+      <span id="txt-qr-nota"></span>
+    </div>
+    <button class="btn-enviar" id="btn-finalizar" type="button" style="max-width:280px; margin-top:26px;">
+      <span id="txt-finalizar"></span>
+    </button>
+  </div>
+
+  <div id="pantalla-exito">
+    <div class="exito-icono">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#1A7A5E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/>
+      </svg>
+    </div>
+    <h2 id="txt-gracias-titulo">¡Gracias!</h2>
+    <p id="txt-gracias-texto"></p>
+    <p class="exito-redirect-nota" id="txt-redirigiendo"></p>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var ESCALA4 = [ // orden de exhibición igual al de los formularios originales
+    { valor: 4, es: 'Muy bueno', en: 'Very Good' },
+    { valor: 3, es: 'Bueno', en: 'Good' },
+    { valor: 2, es: 'Malo', en: 'Bad' },
+    { valor: 1, es: 'Muy malo', en: 'Very Bad' }
+  ];
+  var ESCALA5 = [
+    { valor: 5, es: 'Muy buena', en: 'Very Good' },
+    { valor: 4, es: 'Buena', en: 'Good' },
+    { valor: 3, es: 'Regular', en: 'Fair' },
+    { valor: 2, es: 'Mala', en: 'Bad' },
+    { valor: 1, es: 'Muy mala', en: 'Very Bad' }
+  ];
+  var ESCALA_RECOMENDACION = [
+    { valor: 4, es: 'Definitivamente sí', en: 'Definitely Yes' },
+    { valor: 3, es: 'Probablemente si', en: 'Probably Yes' },
+    { valor: 2, es: 'Probablemente no', en: 'Probably no' },
+    { valor: 1, es: 'Definitivamente no', en: 'Definitely no' }
+  ];
+  var PROCEDIMIENTOS = [
+    { key: 'ortobiologicos', es: 'Ortobiológicos (Células madre, exosomas, PRP)', en: 'Orthobiologics (Stem Cells, Exosomes, PRP)' },
+    { key: 'camara_hiperbarica', es: 'Cámara Hiperbárica', en: 'Hyperbaric Chamber' },
+    { key: 'terapia_avanzada', es: 'Terapia Avanzada', en: 'Advanced Therapy' },
+    { key: 'consulta_medica', es: 'Consulta médica', en: 'Medical Consultation' },
+    { key: 'infusion_multivitaminicos', es: 'Infusión endovenosa de complejos multivitamínicos', en: 'Intravenous Infusion of Multivitamin Complexes' }
+  ];
+
+  var TEXTOS = {
+    es: {
+      tituloPagina: 'Encuesta de Satisfacción · Stemwell',
+      titulo: 'Encuesta de Satisfacción de Pacientes',
+      intro: 'Su retroalimentación nos permite mejorar nuestro servicio profesional. Agradecemos que realice esta encuesta.',
+      fecha: 'Fecha de Registro',
+      nombre: 'Nombre Completo',
+      erFecha: 'Selecciona la fecha',
+      erNombre: 'Ingresa el nombre completo',
+      procedimientoTitulo: '¿Qué procedimiento se realizó con nosotros?',
+      erProcedimiento: 'Selecciona al menos un procedimiento',
+      otro: 'Otro',
+      otroPlaceholder: 'Especifica cuál',
+      personalTitulo: '¿Cómo califica el personal asistencia médico?',
+      recomendariaTitulo: '¿Recomendaría la Clínica a un familiar o amigo(a)?',
+      satisfaccionTitulo: '¿Qué tan satisfecho está con el servicio brindado?',
+      instalacionesTitulo: '¿Cómo calificaría las instalaciones de la Clínica?',
+      claridadTitulo: '¿Qué tan clara fue la información brindada por el personal?',
+      comentariosTitulo: 'Su opinión es valiosa. Por favor, compártanos sus comentarios.',
+      comentariosLabel: '¿En qué cree usted podríamos mejorar?',
+      comentariosPlaceholder: 'Escribe aquí tu respuesta…',
+      erComentarios: 'Este campo es obligatorio',
+      erOpcion: 'Selecciona una opción',
+      inicio: '← Inicio',
+      siguiente: 'Siguiente →',
+      volverPaso: '← Volver',
+      enviar: 'Enviar',
+      enviando: 'Enviando…',
+      graciasTitulo: '¡Muchas gracias!',
+      graciasTexto: 'Tu opinión fue registrada y nos ayuda a mejorar el servicio de la Clínica Stemwell.',
+      finalizar: 'Finalizar',
+      qrNota: 'Escanea y déjanos tu opinión en Google',
+      resenasTitulo: 'Califícanos en Google',
+      redirigiendo: 'Volviendo al inicio…'
+    },
+    en: {
+      tituloPagina: 'Patient Satisfaction Survey · Stemwell',
+      titulo: 'Patient Satisfaction Survey',
+      intro: 'Your feedback helps us improve our professional service. We appreciate you taking the time to complete this survey.',
+      fecha: "Today's Date",
+      nombre: 'Full Name',
+      erFecha: 'Please select a date',
+      erNombre: 'Please enter your full name',
+      procedimientoTitulo: 'Which procedure did you have with us?',
+      erProcedimiento: 'Select at least one procedure',
+      otro: 'Other',
+      otroPlaceholder: 'Please specify',
+      personalTitulo: 'How would you rate the care provided by the medical staff?',
+      recomendariaTitulo: 'Would you recommend the Clinic to a family member or friend?',
+      satisfaccionTitulo: 'How satisfied are you with the service provided?',
+      instalacionesTitulo: 'How would you rate the facilities of the Clinic?',
+      claridadTitulo: 'How clear was the information provided by the staff?',
+      comentariosTitulo: 'Your opinion is valuable. Please share your comments with us.',
+      comentariosLabel: 'What do you think we could improve?',
+      comentariosPlaceholder: 'Write your answer here…',
+      erComentarios: 'This field is required',
+      erOpcion: 'Please select an option',
+      inicio: '← Home',
+      siguiente: 'Next →',
+      volverPaso: '← Back',
+      enviar: 'Submit',
+      enviando: 'Submitting…',
+      graciasTitulo: 'Thank you very much!',
+      graciasTexto: 'Your feedback was recorded and helps us improve the Stemwell Clinic service.',
+      finalizar: 'Finish',
+      qrNota: 'Scan and leave us a review on Google',
+      resenasTitulo: 'Rate us on Google',
+      redirigiendo: 'Returning to home…'
+    }
+  };
+
+  var params = new URLSearchParams(window.location.search);
+  var lang = params.get('lang') === 'en' ? 'en' : 'es';
+  var t = TEXTOS[lang];
+  document.documentElement.lang = lang;
+  document.getElementById('page-title').textContent = t.tituloPagina;
+  document.getElementById('txt-titulo').textContent = t.titulo;
+  document.getElementById('txt-intro').textContent = t.intro;
+  document.getElementById('btn-texto').textContent = t.enviar;
+  document.getElementById('btn-paso1-inicio').textContent = t.inicio;
+  document.getElementById('txt-siguiente').textContent = t.siguiente;
+  document.getElementById('txt-volver-paso').textContent = t.volverPaso;
+  document.getElementById('txt-gracias-titulo').textContent = t.graciasTitulo;
+  document.getElementById('txt-gracias-texto').textContent = t.graciasTexto;
+  document.getElementById('txt-redirigiendo').textContent = t.redirigiendo;
+  document.getElementById('txt-finalizar').textContent = t.finalizar;
+  document.getElementById('txt-resenas-titulo').textContent = t.resenasTitulo;
+  document.getElementById('txt-qr-nota').textContent = t.qrNota;
+  var URL_RESENAS_GOOGLE = 'https://www.google.com/search?sca_esv=9e6a14ff5a8c79b9&rlz=1C1GCEA_enCO1149CO1150&cs=1&sxsrf=APpeQntFuRviJKiUrzklzTcDF-2-ptJvFA:1788297769187&q=opiniones+de+stemwell&si=APenkKm7iecQ4G6P-TsbSMFKIQtv3EFIqRAFw-i8uEbk55Z-_-QOca6WLMCXbv8pnrDR6Fs0v2gDGbFf1LRZR1PtrxdK3okdiIw7gz1Bsmje86-98FduuKnJq-PzzDlaDzH8W4FNrKVl&sa=X&ved=2ahUKEwiMmKOqqM6WAxVpTDABHczUOQkQ9qsLegQIFBAG&biw=360&bih=768&dpr=3#ebo=4';
+  document.getElementById('img-qr-encuesta').src = '/consentimiento/qr-imagen?url=' + encodeURIComponent(URL_RESENAS_GOOGLE);
+
+  // Tras enviar la encuesta se muestra primero "Califícanos en Google";
+  // al darle Finalizar ahí, recién aparece la pantalla de agradecimiento,
+  // que se queda 3 segundos y vuelve sola al inicio.
+  document.getElementById('btn-finalizar').addEventListener('click', function () {
+    document.getElementById('pantalla-resenas').style.display = 'none';
+    document.getElementById('pantalla-exito').style.display = 'flex';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setTimeout(function () {
+      window.location.href = '/consentimiento/?lang=' + lang;
+    }, 3000);
+  });
+  document.getElementById('btn-paso1-inicio').addEventListener('click', function () {
+    window.location.href = '/consentimiento/?lang=' + lang;
+  });
+
+  var respuestas = { procedimientos: [], procedimiento_otro: '' };
+
+  function crearCampoTexto(id, label, tipo, requerido) {
+    var wrap = document.createElement('div');
+    wrap.className = 'section';
+    wrap.innerHTML =
+      '<div class="section-title">' + label + (requerido ? ' <span class="req">*</span>' : '') + '</div>' +
+      '<div class="field">' +
+        '<input type="' + tipo + '" id="' + id + '" />' +
+        '<div class="field-error" id="err-' + id + '"></div>' +
+      '</div>';
+    return wrap;
+  }
+
+  function crearGrupoUnico(id, titulo, opciones, campoDestino) {
+    var wrap = document.createElement('div');
+    wrap.className = 'section';
+    var html = '<div class="section-title">' + titulo + ' <span class="req">*</span></div><div class="pill-fila" id="grupo-' + id + '">';
+    opciones.forEach(function (op) {
+      html += '<div class="pill-opcion" data-valor="' + op.valor + '">' + op[lang] + '</div>';
+    });
+    html += '</div><div class="field-error" id="err-' + id + '">' + t.erOpcion + '</div>';
+    wrap.innerHTML = html;
+    // Nota: las opciones son <div>, no <label>, a propósito — un <label> que
+    // envuelve un input oculto reenvía el click de forma nativa al input, y ese
+    // click reenviado vuelve a burbujear por el label, disparando este mismo
+    // listener dos veces (lo que anula el cambio). Con <div> puro no hay
+    // reenvío nativo, así que un solo click = un solo cambio, siempre.
+    wrap.querySelectorAll('.pill-opcion').forEach(function (el) {
+      el.addEventListener('click', function () {
+        wrap.querySelectorAll('.pill-opcion').forEach(function (o) { o.classList.remove('checked'); });
+        el.classList.add('checked');
+        respuestas[campoDestino] = parseInt(el.getAttribute('data-valor'), 10);
+        document.getElementById('err-' + id).classList.remove('show');
+      });
+    });
+    return wrap;
+  }
+
+  function crearGrupoProcedimientos() {
+    var wrap = document.createElement('div');
+    wrap.className = 'section';
+    var html = '<div class="section-title">' + t.procedimientoTitulo + ' <span class="req">*</span></div><div class="opciones" id="grupo-procedimientos">';
+    PROCEDIMIENTOS.forEach(function (op) {
+      html += '<div class="opcion-wrap" data-key="' + op.key + '">' +
+        '<span class="marca cuadrada"></span>' +
+        '<span class="opcion-texto">' + op[lang] + '</span>' +
+      '</div>';
+    });
+    html += '<div class="opcion-wrap" data-key="otro">' +
+      '<span class="marca cuadrada"></span>' +
+      '<span class="opcion-texto">' + t.otro + '</span>' +
+    '</div>' +
+    '<div class="otro-campo" id="otro-campo"><input type="text" id="procedimiento-otro-texto" placeholder="' + t.otroPlaceholder + '" /></div>' +
+    '</div><div class="field-error" id="err-procedimientos">' + t.erProcedimiento + '</div>';
+    wrap.innerHTML = html;
+
+    wrap.querySelectorAll('.opcion-wrap').forEach(function (el) {
+      el.addEventListener('click', function () {
+        var activo = !el.classList.contains('checked');
+        el.classList.toggle('checked', activo);
+        var key = el.getAttribute('data-key');
+        if (activo) { if (respuestas.procedimientos.indexOf(key) === -1) respuestas.procedimientos.push(key); }
+        else { respuestas.procedimientos = respuestas.procedimientos.filter(function (k) { return k !== key; }); }
+        if (key === 'otro') document.getElementById('otro-campo').classList.toggle('show', activo);
+        if (respuestas.procedimientos.length) document.getElementById('err-procedimientos').classList.remove('show');
+      });
+    });
+    return wrap;
+  }
+
+  function crearComentarios() {
+    var wrap = document.createElement('div');
+    wrap.className = 'section';
+    wrap.innerHTML =
+      '<div class="section-title">' + t.comentariosTitulo + '</div>' +
+      '<div class="field">' +
+        '<label class="campo-label">' + t.comentariosLabel + ' <span style="color:var(--verde)">*</span></label>' +
+        '<textarea id="comentarios" placeholder="' + t.comentariosPlaceholder + '"></textarea>' +
+        '<div class="field-error" id="err-comentarios">' + t.erComentarios + '</div>' +
+      '</div>';
+    return wrap;
+  }
+
+  // ── PASO 1: identificación + procedimiento ──────────────────────────────
+  var contenedor1 = document.getElementById('campos-paso1');
+  contenedor1.appendChild(crearCampoTexto('fecha', t.fecha, 'date', true));
+  contenedor1.appendChild(crearCampoTexto('nombre', t.nombre, 'text', true));
+  contenedor1.appendChild(crearGrupoProcedimientos());
+
+  // ── PASO 2: calificaciones + comentarios ────────────────────────────────
+  var contenedor2 = document.getElementById('campos-paso2');
+  var rejillaCalificaciones = document.createElement('div');
+  rejillaCalificaciones.className = 'paso2-grid';
+  rejillaCalificaciones.appendChild(crearGrupoUnico('personal', t.personalTitulo, ESCALA4, 'calificacion_personal'));
+  rejillaCalificaciones.appendChild(crearGrupoUnico('recomendaria', t.recomendariaTitulo, ESCALA_RECOMENDACION, 'recomendaria'));
+  rejillaCalificaciones.appendChild(crearGrupoUnico('satisfaccion', t.satisfaccionTitulo, ESCALA4, 'satisfaccion_general'));
+  rejillaCalificaciones.appendChild(crearGrupoUnico('instalaciones', t.instalacionesTitulo, ESCALA5, 'calificacion_instalaciones'));
+  rejillaCalificaciones.appendChild(crearGrupoUnico('claridad', t.claridadTitulo, ESCALA5, 'claridad_informacion'));
+  contenedor2.appendChild(rejillaCalificaciones);
+  contenedor2.appendChild(crearComentarios());
+
+  function marcarError(id, mostrar) {
+    var el = document.getElementById('err-' + id);
+    var campo = document.getElementById(id);
+    if (el) el.classList.toggle('show', mostrar);
+    if (campo) campo.classList.toggle('error', mostrar);
+  }
+
+  function irAPaso(desde, hacia) {
+    document.getElementById(desde).classList.remove('activo');
+    document.getElementById(hacia).classList.add('activo');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function validarPaso1() {
+    var ok = true;
+    var fecha = document.getElementById('fecha').value;
+    var nombre = document.getElementById('nombre').value.trim();
+    if (!fecha) { marcarError('fecha', true); ok = false; } else marcarError('fecha', false);
+    if (!nombre) { marcarError('nombre', true); ok = false; } else marcarError('nombre', false);
+
+    var errProc = document.getElementById('err-procedimientos');
+    if (!respuestas.procedimientos.length) { errProc.classList.add('show'); ok = false; } else errProc.classList.remove('show');
+
+    if (!ok) {
+      var primerError = document.querySelector('#paso-1 .field-error.show');
+      if (primerError) primerError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    return ok;
+  }
+
+  function validarPaso2() {
+    var ok = true;
+    ['personal', 'recomendaria', 'satisfaccion', 'instalaciones', 'claridad'].forEach(function (id) {
+      var campo = { personal: 'calificacion_personal', recomendaria: 'recomendaria', satisfaccion: 'satisfaccion_general', instalaciones: 'calificacion_instalaciones', claridad: 'claridad_informacion' }[id];
+      var errEl = document.getElementById('err-' + id);
+      if (!respuestas[campo]) { errEl.classList.add('show'); ok = false; } else errEl.classList.remove('show');
+    });
+
+    var comentarios = document.getElementById('comentarios').value.trim();
+    if (!comentarios) { marcarError('comentarios', true); ok = false; } else marcarError('comentarios', false);
+
+    if (!ok) {
+      var primerError = document.querySelector('#paso-2 .field-error.show');
+      if (primerError) primerError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    return ok;
+  }
+
+  document.getElementById('btn-paso1-siguiente').addEventListener('click', function () {
+    if (!validarPaso1()) return;
+    irAPaso('paso-1', 'paso-2');
+  });
+
+  document.getElementById('btn-paso2-volver').addEventListener('click', function () {
+    irAPaso('paso-2', 'paso-1');
+  });
+
+  document.getElementById('btn-enviar').addEventListener('click', function () {
+    if (!validarPaso2()) return;
+    var btn = document.getElementById('btn-enviar');
+    var texto = document.getElementById('btn-texto');
+    var spinner = document.getElementById('spinner');
+    btn.disabled = true;
+    texto.textContent = t.enviando;
+    spinner.style.display = 'block';
+
+    var payload = {
+      idioma: lang,
+      fecha_registro: document.getElementById('fecha').value,
+      nombre_completo: document.getElementById('nombre').value.trim(),
+      procedimientos: respuestas.procedimientos,
+      procedimiento_otro: document.getElementById('procedimiento-otro-texto') ? document.getElementById('procedimiento-otro-texto').value.trim() : '',
+      calificacion_personal: respuestas.calificacion_personal,
+      recomendaria: respuestas.recomendaria,
+      satisfaccion_general: respuestas.satisfaccion_general,
+      calificacion_instalaciones: respuestas.calificacion_instalaciones,
+      claridad_informacion: respuestas.claridad_informacion,
+      comentarios_mejora: document.getElementById('comentarios').value.trim(),
+      user_agent: navigator.userAgent
+    };
+
+    fetch('/consentimiento/encuesta/guardar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function (res) {
+      return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+    }).then(function (r) {
+      if (r.ok) {
+        document.getElementById('pantalla-form').style.display = 'none';
+        document.getElementById('pantalla-resenas').style.display = 'flex';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        throw new Error(r.data.mensaje || 'Error del servidor');
+      }
+    }).catch(function (err) {
+      console.error(err);
+      alert((lang === 'en' ? 'There was a problem saving your answer.\n\n' : 'Hubo un problema al guardar tu respuesta.\n\n') + err.message);
+    }).finally(function () {
+      btn.disabled = false;
+      texto.textContent = t.enviar;
+      spinner.style.display = 'none';
+    });
+  });
+})();
+</script>
+</body>
+</html>

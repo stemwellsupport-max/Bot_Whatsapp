@@ -114,10 +114,14 @@ async function initDB() {
         enfermero_nombre          VARCHAR(150) DEFAULT '',
         enfermero_doc             VARCHAR(50)  DEFAULT '',
         pdf_url                   VARCHAR(255) DEFAULT '',
+        idioma                    VARCHAR(2)   DEFAULT 'es',
         user_agent                TEXT DEFAULT '',
         creado_en                 TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
+    // Migración para instalaciones ya existentes (CREATE TABLE IF NOT EXISTS
+    // no agrega columnas nuevas a una tabla que ya existía sin ellas).
+    await client.query(`ALTER TABLE admisiones ADD COLUMN IF NOT EXISTS idioma VARCHAR(2) DEFAULT 'es';`);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS admisiones_documentos (
@@ -141,6 +145,26 @@ async function initDB() {
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_admisiones_documentos_admision
       ON admisiones_documentos(admision_id);
+    `);
+
+    // ­ƒôè ENCUESTAS DE SATISFACCI├ôN (ES/EN)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS encuestas_satisfaccion (
+        id                          SERIAL PRIMARY KEY,
+        idioma                      VARCHAR(5) NOT NULL DEFAULT 'es',
+        fecha_registro              DATE NOT NULL,
+        nombre_completo             VARCHAR(200) NOT NULL,
+        procedimientos              TEXT DEFAULT '',
+        procedimiento_otro          VARCHAR(255) DEFAULT '',
+        calificacion_personal       SMALLINT,
+        recomendaria                SMALLINT,
+        satisfaccion_general        SMALLINT,
+        calificacion_instalaciones  SMALLINT,
+        claridad_informacion        SMALLINT,
+        comentarios_mejora          TEXT,
+        user_agent                  TEXT DEFAULT '',
+        creado_en                   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
     `);
 
     console.log('Ô£à Tablas PostgreSQL verificadas/creadas');
