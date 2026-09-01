@@ -88,8 +88,59 @@ async function initDB() {
     `);
 
     await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_ia_conocimiento_confianza 
+      CREATE INDEX IF NOT EXISTS idx_ia_conocimiento_confianza
       ON ia_conocimiento(confianza DESC, veces_usada DESC);
+    `);
+
+    // ­ƒôï ADMISIONES (formatos de consentimiento firmados en tablet)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS admisiones (
+        id                        SERIAL PRIMARY KEY,
+        folio                     VARCHAR(40) UNIQUE NOT NULL,
+        nombres                   VARCHAR(150) NOT NULL,
+        apellidos                 VARCHAR(150) NOT NULL,
+        tipo_doc                  VARCHAR(10)  NOT NULL,
+        cedula                    VARCHAR(50)  NOT NULL,
+        telefono                  VARCHAR(30)  NOT NULL,
+        email                     VARCHAR(255) NOT NULL,
+        procedimientos            TEXT DEFAULT '',
+        representante_nombre      VARCHAR(150) DEFAULT '',
+        representante_doc         VARCHAR(50)  DEFAULT '',
+        representante_parentesco  VARCHAR(100) DEFAULT '',
+        medico_nombre             VARCHAR(150) DEFAULT '',
+        medico_doc                VARCHAR(50)  DEFAULT '',
+        anestesiologo_nombre      VARCHAR(150) DEFAULT '',
+        anestesiologo_doc         VARCHAR(50)  DEFAULT '',
+        enfermero_nombre          VARCHAR(150) DEFAULT '',
+        enfermero_doc             VARCHAR(50)  DEFAULT '',
+        pdf_url                   VARCHAR(255) DEFAULT '',
+        user_agent                TEXT DEFAULT '',
+        creado_en                 TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS admisiones_documentos (
+        id                    SERIAL PRIMARY KEY,
+        admision_id           INT NOT NULL REFERENCES admisiones(id) ON DELETE CASCADE,
+        documento_key         VARCHAR(60)  NOT NULL,
+        documento_titulo      VARCHAR(255) NOT NULL,
+        documento_codigo      VARCHAR(60)  DEFAULT '',
+        acepto                BOOLEAN DEFAULT FALSE,
+        checklist             JSONB DEFAULT '{}',
+        seleccion             JSONB DEFAULT '{}',
+        firma_paciente        TEXT,
+        firma_representante   TEXT,
+        firma_medico          TEXT,
+        firma_anestesiologo   TEXT,
+        firma_enfermero       TEXT,
+        creado_en             TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_admisiones_documentos_admision
+      ON admisiones_documentos(admision_id);
     `);
 
     console.log('Ô£à Tablas PostgreSQL verificadas/creadas');

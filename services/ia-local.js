@@ -9,7 +9,17 @@ const LM_MODEL = process.env.LM_MODEL || 'qwen2.5-3b-instruct';
 const idiomasPorTelefono = new Map();
 const timersEncuesta = new Map();
 const estadoEncuesta = new Map(); // 'esperando' | 'respondida'
+const falloTotalPorTelefono = new Set(); // telefonos cuya ultima respuesta fue el fallback (ningun proveedor de IA respondio)
 const ENCUESTA_TIMEOUT = 60000;
+
+// El caller (handlers.js) consulta esto justo despues de responderConIA para
+// saber si la respuesta devuelta fue el fallback generico (ambos proveedores
+// de IA fallaron) y así decidir si escala a un asesor humano.
+function consumioFalloTotal(telefono) {
+  const fallo = falloTotalPorTelefono.has(telefono);
+  falloTotalPorTelefono.delete(telefono);
+  return fallo;
+}
 
 function normalizar(texto) {
   return texto.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
@@ -137,6 +147,7 @@ async function responderConLMStudio(mensajeUsuario, idioma) {
 
 async function responderConIA(mensajeUsuario, nombreUsuario, telefono, idiomaForzado, sendMessageFn) {
   if (!sendMessageFn) sendMessageFn = null;
+  falloTotalPorTelefono.delete(telefono);
 
   var nuevoIdioma = detectarIdioma(mensajeUsuario);
   var idiomaGuardado = idiomasPorTelefono.get(telefono) || 'es';
@@ -190,7 +201,9 @@ async function responderConIA(mensajeUsuario, nombreUsuario, telefono, idiomaFor
   } catch (e6) {
     console.log('\u26a0 LM Studio fall\u00f3 (sin API key externa)');
   }
-  // Último recurso: respuesta genérica de contacto
+  // Último recurso: ningún proveedor de IA respondió. Se marca para que el
+  // caller (handlers.js) pueda escalar a un asesor humano.
+  falloTotalPorTelefono.add(telefono);
   var fallback = (idioma === 'en')
     ? '\u00a0 Thank you for contacting Stemwell.\n\n Kr 13 #118-08, Bogot\u00e1\n +57 310 406 8755\n Book: ' + AGENDA_URL
     : '\u00a0 Gracias por contactar a Stemwell.\n\n Kr 13 #118-08, Bogot\u00e1\n +57 310 406 8755\n Agenda: ' + AGENDA_URL;
@@ -198,4 +211,4 @@ async function responderConIA(mensajeUsuario, nombreUsuario, telefono, idiomaFor
   return fallback;
 }
 
-module.exports = { responderConIA: responderConIA, detectarIdioma: detectarIdioma };
+module.exports = { responderConIA: responderConIA, detectarIdioma: detectarIdioma, consumioFalloTotal: consumioFalloTotal };

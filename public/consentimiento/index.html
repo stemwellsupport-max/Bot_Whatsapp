@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Autorización de Datos · Stemwell</title>
+  <title>Admisión de Paciente · Stemwell</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -19,9 +19,12 @@
       --blanco:      #FFFFFF;
       --error:       #C0392B;
       --exito:       #1A7A5E;
+      --max-w:       560px;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { -webkit-text-size-adjust: 100%; }
 
     body {
       font-family: 'Poppins', sans-serif;
@@ -38,36 +41,54 @@
       padding: 10px 24px;
       display: flex;
       align-items: center;
+      justify-content: space-between;
       position: sticky;
       top: 0;
-      z-index: 10;
+      z-index: 20;
     }
-    .logo-mark {
-      width: 38px; height: 38px;
-      background: var(--verde);
-      border-radius: 10px;
-      display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0;
-    }
-    .logo-mark svg { width: 22px; height: 22px; }
-    .header-text h1 {
-      font-size: 17px;
+    .header img { height: 54px; width: auto; }
+    .header-progreso {
+      font-size: 12.5px;
+      font-weight: 600;
       color: var(--verde);
-      line-height: 1.1;
-      font-weight: 700;
+      background: var(--verde-claro);
+      padding: 6px 13px;
+      border-radius: 20px;
+      white-space: nowrap;
+      display: none;
     }
-    .header-text p {
-      font-size: 11px;
-      color: var(--gris);
-      font-weight: 400;
-      margin-top: 1px;
+    .header-progreso.show { display: block; }
+
+    /* ── BARRA DE PROGRESO ── */
+    .barra-progreso {
+      height: 4px;
+      background: var(--borde);
+      position: sticky;
+      top: 74px;
+      z-index: 19;
+      display: none;
+    }
+    .barra-progreso.show { display: block; }
+    .barra-progreso-fill {
+      height: 100%;
+      background: var(--verde);
+      transition: width 0.3s ease;
+      width: 0%;
     }
 
     /* ── CONTENEDOR ── */
     .container {
-      max-width: 560px;
+      max-width: var(--max-w);
       margin: 0 auto;
       padding: 28px 20px 60px;
+      transition: max-width 0.2s ease;
+    }
+    @media (min-width: 700px) {
+      :root { --max-w: 680px; }
+      body { font-size: 15px; }
+    }
+    @media (min-width: 1000px) {
+      :root { --max-w: 760px; }
     }
 
     /* ── INTRO CARD ── */
@@ -89,7 +110,7 @@
       border-radius: 50%;
     }
     .intro-card h2 {
-      font-size: 22px;
+      font-size: clamp(20px, 4vw, 24px);
       line-height: 1.25;
       margin-bottom: 8px;
       font-weight: 700;
@@ -109,6 +130,16 @@
       font-size: 11px;
       font-weight: 500;
       margin-top: 14px;
+    }
+    .chip-codigo {
+      display: inline-block;
+      background: rgba(255,255,255,0.18);
+      border-radius: 8px;
+      padding: 3px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      margin-bottom: 8px;
     }
 
     /* ── SECCIONES ── */
@@ -136,6 +167,12 @@
       background: var(--verde-med);
       border-radius: 2px;
       display: block;
+    }
+    .section-sub {
+      font-size: 12.5px;
+      color: var(--gris);
+      margin: -8px 0 16px;
+      line-height: 1.5;
     }
 
     /* ── CAMPOS ── */
@@ -179,32 +216,71 @@
     }
     .field-error.show { display: block; }
 
-    /* Fila de dos columnas */
+    /* Rejilla responsive: 2 columnas en pantallas anchas, 1 en angostas */
     .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    @media (max-width: 420px) { .row-2 { grid-template-columns: 1fr; } }
+    @media (max-width: 460px) { .row-2 { grid-template-columns: 1fr; } }
+    .row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    @media (max-width: 620px) { .row-3 { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 420px) { .row-3 { grid-template-columns: 1fr; } }
 
-    /* ── POLÍTICA (scroll) ── */
-    .politica-scroll {
+    /* ── CUERPO DEL DOCUMENTO ── */
+    .doc-scroll {
       background: var(--fondo);
       border: 1.5px solid var(--borde);
       border-radius: 11px;
-      padding: 16px;
-      max-height: 200px;
+      padding: 18px;
+      max-height: min(46vh, 480px);
       overflow-y: auto;
-      font-size: 12.5px;
+      font-size: 13.5px;
       line-height: 1.7;
-      color: var(--gris);
-      margin-bottom: 14px;
-    }
-    .politica-scroll::-webkit-scrollbar { width: 4px; }
-    .politica-scroll::-webkit-scrollbar-thumb { background: var(--borde); border-radius: 4px; }
-    .politica-scroll h4 {
-      font-size: 12px;
-      font-weight: 600;
       color: var(--texto);
-      margin: 12px 0 4px;
+      margin-bottom: 14px;
+      -webkit-overflow-scrolling: touch;
     }
-    .politica-scroll h4:first-child { margin-top: 0; }
+    .doc-scroll::-webkit-scrollbar { width: 5px; }
+    .doc-scroll::-webkit-scrollbar-thumb { background: var(--borde); border-radius: 4px; }
+    .doc-scroll h4 {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--verde);
+      margin: 14px 0 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .doc-scroll h4:first-child { margin-top: 0; }
+    .doc-scroll p { margin-bottom: 10px; }
+    .doc-scroll ul { margin: 0 0 10px 18px; }
+    .doc-scroll li { margin-bottom: 4px; }
+
+    /* ── SELECCIÓN TIPO PÍLDORA (radios/checklist) ── */
+    .pill-group { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 14px; }
+    .pill {
+      padding: 8px 14px;
+      border-radius: 20px;
+      border: 1.5px solid var(--borde);
+      background: var(--blanco);
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--texto);
+      cursor: pointer;
+      transition: all 0.15s;
+      user-select: none;
+    }
+    .pill.activo { background: var(--verde); border-color: var(--verde); color: white; }
+    .checklist-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 9px 0;
+      border-bottom: 1px dashed var(--borde);
+      font-size: 13px;
+    }
+    .checklist-item:last-child { border-bottom: none; }
+    .checklist-item .pill-group { margin: 0; flex-shrink: 0; }
+    .checklist-item .pill { padding: 5px 12px; font-size: 11.5px; }
+    .checklist-titulo { font-weight: 600; color: var(--texto); font-size: 12.5px; margin: 12px 0 4px; text-transform: uppercase; letter-spacing: 0.03em; }
+    .checklist-titulo:first-child { margin-top: 0; }
 
     /* ── CHECKBOX ── */
     .check-wrap {
@@ -217,6 +293,7 @@
       cursor: pointer;
       transition: border-color 0.2s, background 0.2s;
     }
+    .check-wrap.stack { margin-bottom: 10px; }
     .check-wrap:hover { border-color: var(--verde-med); background: var(--verde-claro); }
     .check-wrap input[type="checkbox"] { display: none; }
     .check-box {
@@ -246,8 +323,30 @@
       color: var(--texto);
     }
     .check-label strong { color: var(--verde); }
+    .check-label small { display: block; color: var(--gris); margin-top: 3px; font-weight: 400; }
+
+    /* Campos revelados por un checkbox (acudiente, testigo, etc.) */
+    .subcampos {
+      display: none;
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px dashed var(--borde);
+    }
+    .subcampos.show { display: block; }
 
     /* ── CANVAS DE FIRMA ── */
+    .firma-bloque { margin-bottom: 18px; }
+    .firma-bloque:last-child { margin-bottom: 0; }
+    .firma-titulo {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--texto);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .firma-titulo span.nombre-firmante { font-weight: 400; color: var(--gris); font-size: 12px; }
     .firma-wrap {
       position: relative;
       border: 2px dashed var(--borde);
@@ -275,10 +374,10 @@
       opacity: 0.7;
       font-weight: 400;
     }
-    canvas#firma-canvas {
+    canvas.firma-canvas {
       display: block;
       width: 100%;
-      height: 160px;
+      height: min(22vh, 170px);
       touch-action: none;
       cursor: crosshair;
     }
@@ -309,7 +408,7 @@
     }
     .firma-error.show { display: block; }
 
-    /* ── BOTÓN ENVIAR ── */
+    /* ── BOTONES ── */
     .btn-enviar {
       width: 100%;
       padding: 17px;
@@ -318,7 +417,7 @@
       border: none;
       border-radius: 14px;
       font-family: 'Poppins', sans-serif;
-      font-size: 18px;
+      font-size: 17px;
       font-weight: 600;
       cursor: pointer;
       transition: all 0.2s;
@@ -334,6 +433,25 @@
       box-shadow: 0 6px 20px rgba(0, 178, 194, 0.3);
     }
     .btn-enviar:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-secundario {
+      width: 100%;
+      padding: 14px;
+      background: none;
+      color: var(--gris);
+      border: 1.5px solid var(--borde);
+      border-radius: 14px;
+      font-family: 'Poppins', sans-serif;
+      font-size: 14.5px;
+      font-weight: 500;
+      cursor: pointer;
+      margin-top: 10px;
+      transition: all 0.2s;
+    }
+    .btn-secundario:hover { border-color: var(--verde-med); color: var(--verde); }
+    .botones-nav { display: flex; gap: 10px; margin-top: 8px; }
+    .botones-nav .btn-secundario { margin-top: 0; flex: 0 0 auto; width: auto; padding: 14px 20px; }
+    .botones-nav .btn-enviar { margin-top: 0; flex: 1; }
+
     .spinner {
       width: 20px; height: 20px;
       border: 2px solid rgba(255,255,255,0.3);
@@ -379,7 +497,7 @@
       font-size: 14.5px;
       color: var(--gris);
       line-height: 1.65;
-      max-width: 320px;
+      max-width: 360px;
     }
     .folio-box {
       background: var(--verde-claro);
@@ -391,21 +509,28 @@
     }
     .folio-box p { font-size: 12px; color: var(--gris); margin-bottom: 4px; }
     .folio-box strong { font-size: 22px; color: var(--verde); letter-spacing: 0.06em; font-weight: 600; }
+    #pantalla-exito .btn-secundario { max-width: 320px; }
+
+    /* Pantallas ocultas por defecto */
+    .pantalla { display: none; }
+    .pantalla.activa { display: block; }
   </style>
 </head>
 <body>
 
 <header class="header">
-  <img src="/images/STEMWELL_LOGO_.png" alt="Stemwell" style="height:54px; width:auto;" />
+  <img src="/images/STEMWELL_LOGO_.png" alt="Stemwell" />
+  <span class="header-progreso" id="header-progreso"></span>
 </header>
+<div class="barra-progreso" id="barra-progreso"><div class="barra-progreso-fill" id="barra-progreso-fill"></div></div>
 
 <div class="container">
 
-  <div id="pantalla-form">
-
+  <!-- ══════════ PASO 0 — STAFF: SELECCIÓN DE PROCEDIMIENTOS ══════════ -->
+  <div class="pantalla activa" id="pantalla-staff">
     <div class="intro-card">
-      <h2>Autorización de<br>Tratamiento de Datos</h2>
-      <p>Antes de tu cita, necesitamos tu autorización para manejar tu información con responsabilidad y confidencialidad.</p>
+      <h2>Admisión del<br>Paciente</h2>
+      <p>Antes de entregar la tablet al paciente, selecciona los procedimientos que se realizarán hoy. Los documentos generales (política de datos, bienvenida, descargo de responsabilidad y uso de imagen) se incluyen siempre.</p>
       <div class="badge-legal">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
         Ley 1581 de 2012 · Colombia
@@ -413,21 +538,38 @@
     </div>
 
     <div class="section">
-      <div class="section-title">Datos del Titular</div>
+      <div class="section-title">Procedimientos de hoy</div>
+      <div class="section-sub">Marca solo los que apliquen para esta visita.</div>
+      <div id="lista-procedimientos"></div>
+    </div>
 
+    <button class="btn-enviar" id="btn-staff-continuar" type="button">
+      Continuar con el paciente
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+    </button>
+  </div>
+
+  <!-- ══════════ PASO 1 — DATOS DEL PACIENTE Y DEL EQUIPO ══════════ -->
+  <div class="pantalla" id="pantalla-datos">
+    <div class="intro-card">
+      <h2>Datos de la<br>Admisión</h2>
+      <p>Estos datos se usarán en todos los documentos que el paciente firmará a continuación.</p>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Datos del Titular</div>
       <div class="row-2">
         <div class="field">
           <label>Nombre(s) <span class="req">*</span></label>
           <input type="text" id="nombres" placeholder="Juan Carlos" autocomplete="given-name" />
-          <div class="field-error" id="err-nombres">Ingresa tu nombre</div>
+          <div class="field-error" id="err-nombres">Ingresa el nombre</div>
         </div>
         <div class="field">
           <label>Apellido(s) <span class="req">*</span></label>
           <input type="text" id="apellidos" placeholder="Rodríguez" autocomplete="family-name" />
-          <div class="field-error" id="err-apellidos">Ingresa tu apellido</div>
+          <div class="field-error" id="err-apellidos">Ingresa el apellido</div>
         </div>
       </div>
-
       <div class="row-2">
         <div class="field">
           <label>Tipo de documento <span class="req">*</span></label>
@@ -444,16 +586,14 @@
         <div class="field">
           <label>Número de documento <span class="req">*</span></label>
           <input type="tel" id="cedula" placeholder="1234567890" inputmode="numeric" />
-          <div class="field-error" id="err-cedula">Ingresa tu documento</div>
+          <div class="field-error" id="err-cedula">Ingresa el documento</div>
         </div>
       </div>
-
       <div class="field">
         <label>Teléfono / WhatsApp <span class="req">*</span></label>
         <input type="tel" id="telefono" placeholder="+57 300 000 0000" inputmode="tel" autocomplete="tel" />
-        <div class="field-error" id="err-telefono">Ingresa tu teléfono</div>
+        <div class="field-error" id="err-telefono">Ingresa el teléfono</div>
       </div>
-
       <div class="field">
         <label>Correo electrónico <span class="req">*</span></label>
         <input type="email" id="email" placeholder="tucorreo@ejemplo.com" inputmode="email" autocomplete="email" />
@@ -462,257 +602,656 @@
     </div>
 
     <div class="section">
-      <div class="section-title">Política de Tratamiento</div>
-
-      <div class="politica-scroll">
-        <h4>¿Quién es responsable?</h4>
-        STEMWELL, NIT 901.970.773-4, Carrera 13 No. 118-08, Bogotá D.C. Contacto: info@stemwell.co · +57 310 406 8755
-
-        <h4>¿Para qué usamos tus datos?</h4>
-        Prestación de servicios de salud, valoraciones médicas, diagnósticos, tratamientos, seguimientos clínicos, historia clínica, gestión de citas, facturación y reportes ante entidades del Sistema de Seguridad Social.
-
-        <h4>Datos sensibles de salud</h4>
-        La información clínica se maneja bajo estrictos estándares de confidencialidad y acceso restringido. Solo personal asistencial autorizado puede acceder a ella.
-
-        <h4>¿Con quién compartimos?</h4>
-        Con EPS, IPS aliadas, laboratorios, aseguradoras, autoridades regulatorias y proveedores tecnológicos, exigiendo siempre medidas de seguridad adecuadas.
-
-        <h4>Tus derechos</h4>
-        Conocer, actualizar, rectificar y suprimir tus datos. Revocar la autorización cuando sea procedente. Presentar quejas ante la Superintendencia de Industria y Comercio.
-
-        <h4>Vigencia</h4>
-        Esta política rige desde su publicación y podrá modificarse con previo aviso por los canales oficiales de Stemwell.
-      </div>
-
-      <label class="check-wrap" id="check-wrap-acepto">
-        <input type="checkbox" id="acepto-politica" />
+      <div class="section-title">Acudiente / Representante / Testigo</div>
+      <label class="check-wrap" id="check-wrap-representante">
+        <input type="checkbox" id="representante-habilitado" />
         <div class="check-box"></div>
         <span class="check-label">
-          He leído y acepto la <strong>Política de Tratamiento de Datos Personales</strong> de Stemwell, conforme a la Ley 1581 de 2012.
+          Un acudiente, representante legal o testigo firmará en nombre o junto al paciente
+          <small>Actívalo si el paciente es menor de edad, está representado por alguien más, o si el documento requiere testigo.</small>
         </span>
       </label>
-      <div class="field-error" id="err-acepto">Debes aceptar la política para continuar</div>
+      <div class="subcampos" id="subcampos-representante">
+        <div class="row-2">
+          <div class="field">
+            <label>Nombre completo <span class="req">*</span></label>
+            <input type="text" id="representante-nombre" placeholder="Nombre del acudiente / testigo" />
+            <div class="field-error" id="err-representante-nombre">Ingresa el nombre</div>
+          </div>
+          <div class="field">
+            <label>Número de documento <span class="req">*</span></label>
+            <input type="text" id="representante-doc" placeholder="1234567890" inputmode="numeric" />
+            <div class="field-error" id="err-representante-doc">Ingresa el documento</div>
+          </div>
+        </div>
+        <div class="field">
+          <label>Parentesco / relación con el paciente</label>
+          <input type="text" id="representante-parentesco" placeholder="Ej. Padre, madre, cónyuge, acompañante…" />
+        </div>
+      </div>
     </div>
 
     <div class="section">
-      <div class="section-title">Firma del Titular</div>
-      <p style="font-size:13px; color:var(--gris); margin-bottom:14px; line-height:1.55;">
-        Firma con tu dedo o mouse en el espacio de abajo. Esta firma quedará registrada junto a tu autorización.
-      </p>
-      <div class="firma-wrap" id="firma-wrap">
-        <div class="firma-hint" id="firma-hint">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
-          </svg>
-          <p>Firma aquí</p>
+      <div class="section-title">Equipo Médico Responsable</div>
+      <div class="row-2">
+        <div class="field">
+          <label>Médico tratante <span class="req">*</span></label>
+          <input type="text" id="medico-nombre" placeholder="Dr(a). Nombre completo" />
+          <div class="field-error" id="err-medico-nombre">Ingresa el nombre del médico</div>
         </div>
-        <canvas id="firma-canvas" width="800" height="320"></canvas>
-        <div class="firma-actions">
-          <button class="btn-limpiar" id="btn-limpiar-firma" type="button">✕ Limpiar firma</button>
+        <div class="field">
+          <label>Documento del médico <span class="req">*</span></label>
+          <input type="text" id="medico-doc" placeholder="1234567890" inputmode="numeric" />
+          <div class="field-error" id="err-medico-doc">Ingresa el documento</div>
         </div>
       </div>
-      <div class="firma-error" id="err-firma">Por favor coloca tu firma para continuar</div>
+
+      <div class="row-2" id="campos-anestesiologo" style="display:none;">
+        <div class="field">
+          <label>Médico anestesiólogo <span class="req">*</span></label>
+          <input type="text" id="anestesiologo-nombre" placeholder="Dr(a). Nombre completo" />
+          <div class="field-error" id="err-anestesiologo-nombre">Ingresa el nombre</div>
+        </div>
+        <div class="field">
+          <label>Documento del anestesiólogo <span class="req">*</span></label>
+          <input type="text" id="anestesiologo-doc" placeholder="1234567890" inputmode="numeric" />
+          <div class="field-error" id="err-anestesiologo-doc">Ingresa el documento</div>
+        </div>
+      </div>
+
+      <div class="row-2" id="campos-enfermero" style="display:none;">
+        <div class="field">
+          <label>Profesional de enfermería <span class="req">*</span></label>
+          <input type="text" id="enfermero-nombre" placeholder="Nombre completo" />
+          <div class="field-error" id="err-enfermero-nombre">Ingresa el nombre</div>
+        </div>
+        <div class="field">
+          <label>Documento del profesional <span class="req">*</span></label>
+          <input type="text" id="enfermero-doc" placeholder="1234567890" inputmode="numeric" />
+          <div class="field-error" id="err-enfermero-doc">Ingresa el documento</div>
+        </div>
+      </div>
     </div>
 
-    <button class="btn-enviar" id="btn-enviar" type="button">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-        <polyline points="9 12 11 14 15 10"/>
-      </svg>
-      <span id="btn-texto">Confirmar y firmar</span>
-      <div class="spinner" id="spinner"></div>
-    </button>
+    <div class="botones-nav">
+      <button class="btn-secundario" id="btn-datos-atras" type="button">← Atrás</button>
+      <button class="btn-enviar" id="btn-datos-continuar" type="button">Iniciar firma de documentos</button>
+    </div>
+  </div>
 
-    <p class="nota-footer">
-      Al confirmar, tu firma digital queda registrada con fecha, hora y<br>número de documento.
-      Ley 527 de 1999 · Colombia.
-    </p>
+  <!-- ══════════ PASO 2..N — UN DOCUMENTO POR PANTALLA (plantilla) ══════════ -->
+  <div class="pantalla" id="pantalla-documento">
+    <div class="intro-card" id="doc-intro-card">
+      <span class="chip-codigo" id="doc-codigo" style="display:none;"></span>
+      <h2 id="doc-titulo">&nbsp;</h2>
+    </div>
 
-  </div><div id="pantalla-exito">
+    <div class="section">
+      <div class="section-title">Contenido del documento</div>
+      <div class="doc-scroll" id="doc-cuerpo"></div>
+
+      <div id="doc-aceptacion-wrap">
+        <label class="check-wrap" id="check-wrap-doc-acepto">
+          <input type="checkbox" id="doc-acepto" />
+          <div class="check-box"></div>
+          <span class="check-label" id="doc-acepto-texto"></span>
+        </label>
+        <div class="field-error" id="err-doc-acepto">Debes aceptar el documento para continuar</div>
+      </div>
+    </div>
+
+    <div class="section" id="doc-firmas-section">
+      <div class="section-title">Firmas</div>
+      <div id="doc-firmas-contenedor"></div>
+    </div>
+
+    <div class="botones-nav">
+      <button class="btn-secundario" id="btn-doc-atras" type="button">← Anterior</button>
+      <button class="btn-enviar" id="btn-doc-continuar" type="button">
+        <span id="btn-doc-texto">Firmar y continuar</span>
+        <div class="spinner" id="spinner-doc"></div>
+      </button>
+    </div>
+  </div>
+
+  <!-- ══════════ PANTALLA FINAL — ÉXITO ══════════ -->
+  <div id="pantalla-exito">
     <div class="exito-icono">
       <svg viewBox="0 0 24 24" fill="none" stroke="#1A7A5E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
         <polyline points="9 12 11 14 15 10"/>
       </svg>
     </div>
-    <h2>¡Autorización registrada!</h2>
-    <p>Tu firma y consentimiento quedaron guardados de forma segura. Puedes cerrar esta ventana.</p>
+    <h2>¡Admisión registrada!</h2>
+    <p>Todos los documentos y firmas quedaron guardados de forma segura.</p>
     <div class="folio-box">
       <p>Número de folio</p>
       <strong id="folio-numero">—</strong>
     </div>
     <p style="font-size:12px; color:var(--gris);">
-      Recibirás confirmación al correo registrado.<br>
+      El paciente recibirá confirmación al correo registrado.<br>
       ¿Preguntas? <a href="mailto:info@stemwell.co">info@stemwell.co</a>
     </p>
+    <button class="btn-secundario" id="btn-nuevo-paciente" type="button" style="margin-top:26px;">+ Registrar nueva admisión</button>
   </div>
 
-</div><script>
-// ── CANVAS DE FIRMA ─────────────────────────────────────────────────────
-const canvas  = document.getElementById('firma-canvas');
-const ctx     = canvas.getContext('2d');
-const hint    = document.getElementById('firma-hint');
-const wrap    = document.getElementById('firma-wrap');
-let pintando  = false;
-let firmaTocada = false;
+</div>
 
-function escalarCanvas() {
-  const rect = canvas.getBoundingClientRect();
-  canvas.width  = rect.width  * window.devicePixelRatio;
-  canvas.height = rect.height * window.devicePixelRatio;
-  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-  ctx.lineWidth   = 2.2;
-  ctx.lineCap     = 'round';
-  ctx.lineJoin    = 'round';
-  ctx.strokeStyle = '#1C2B26';
-}
-window.addEventListener('resize', escalarCanvas);
-escalarCanvas();
+<script src="/consentimiento/documentos.js"></script>
+<script>
+(function () {
+  'use strict';
+  var DOCS = window.DOCUMENTOS_ADMISION.DOCUMENTOS;
+  var ORDEN_GENERAL = window.DOCUMENTOS_ADMISION.ORDEN_GENERAL;
+  var ORDEN_PROCEDIMIENTOS = window.DOCUMENTOS_ADMISION.ORDEN_PROCEDIMIENTOS;
+  var ROLES = window.DOCUMENTOS_ADMISION.ROLES;
 
-function posicion(e) {
-  const r = canvas.getBoundingClientRect();
-  if (e.touches) {
-    return { x: e.touches[0].clientX - r.left, y: e.touches[0].clientY - r.top };
-  }
-  return { x: e.clientX - r.left, y: e.clientY - r.top };
-}
+  // ── ESTADO GLOBAL ─────────────────────────────────────────────────────
+  var estado = estadoInicial();
+  var cola = [];        // claves de documentos a firmar, en orden
+  var indiceDoc = -1;   // índice actual dentro de `cola`
+  var padsActuales = {}; // pads de firma activos en la pantalla de documento actual
 
-function iniciar(e) {
-  e.preventDefault();
-  pintando = true;
-  const p = posicion(e);
-  ctx.beginPath();
-  ctx.moveTo(p.x, p.y);
-  hint.style.opacity = '0';
-  wrap.classList.add('activo');
-  firmaTocada = true;
-}
-function dibujar(e) {
-  e.preventDefault();
-  if (!pintando) return;
-  const p = posicion(e);
-  ctx.lineTo(p.x, p.y);
-  ctx.stroke();
-}
-function detener(e) { pintando = false; }
-
-canvas.addEventListener('mousedown',  iniciar,  { passive: false });
-canvas.addEventListener('mousemove',  dibujar,  { passive: false });
-canvas.addEventListener('mouseup',    detener);
-canvas.addEventListener('mouseleave', detener);
-canvas.addEventListener('touchstart', iniciar,  { passive: false });
-canvas.addEventListener('touchmove',  dibujar,  { passive: false });
-canvas.addEventListener('touchend',   detener);
-
-document.getElementById('btn-limpiar-firma').addEventListener('click', () => {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  hint.style.opacity = '1';
-  wrap.classList.remove('activo');
-  firmaTocada = false;
-});
-
-// ── CHECKBOX ─────────────────────────────────────────────────────────────
-const checkWrap = document.getElementById('check-wrap-acepto');
-const checkInput = document.getElementById('acepto-politica');
-checkWrap.addEventListener('click', () => {
-  checkInput.checked = !checkInput.checked;
-  checkWrap.classList.toggle('checked', checkInput.checked);
-});
-
-// ── VALIDACIÓN ───────────────────────────────────────────────────────────
-function mostrarError(id, show) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.classList.toggle('show', show);
-}
-function marcarCampo(id, error) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.classList.toggle('error', error);
-}
-
-function validar() {
-  let ok = true;
-
-  const nombres   = document.getElementById('nombres').value.trim();
-  const apellidos = document.getElementById('apellidos').value.trim();
-  const tipoDoc   = document.getElementById('tipo-doc').value;
-  const cedula    = document.getElementById('cedula').value.trim();
-  const telefono  = document.getElementById('telefono').value.trim();
-  const email     = document.getElementById('email').value.trim();
-
-  if (!nombres)   { marcarCampo('nombres', true);   mostrarError('err-nombres', true);   ok = false; } else { marcarCampo('nombres', false);   mostrarError('err-nombres', false); }
-  if (!apellidos) { marcarCampo('apellidos', true);  mostrarError('err-apellidos', true); ok = false; } else { marcarCampo('apellidos', false);  mostrarError('err-apellidos', false); }
-  if (!tipoDoc)   { marcarCampo('tipo-doc', true);   mostrarError('err-tipo-doc', true);  ok = false; } else { marcarCampo('tipo-doc', false);   mostrarError('err-tipo-doc', false); }
-  if (cedula.length < 5) { marcarCampo('cedula', true); mostrarError('err-cedula', true); ok = false; } else { marcarCampo('cedula', false); mostrarError('err-cedula', false); }
-  if (telefono.replace(/\D/g,'').length < 7) { marcarCampo('telefono', true); mostrarError('err-telefono', true); ok = false; } else { marcarCampo('telefono', false); mostrarError('err-telefono', false); }
-
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) { marcarCampo('email', true); mostrarError('err-email', true); ok = false; } else { marcarCampo('email', false); mostrarError('err-email', false); }
-
-  if (!checkInput.checked) { mostrarError('err-acepto', true); ok = false; } else { mostrarError('err-acepto', false); }
-  if (!firmaTocada) { document.getElementById('err-firma').classList.add('show'); ok = false; }
-  else              { document.getElementById('err-firma').classList.remove('show'); }
-
-  return ok;
-}
-
-// ── ENVÍO ─────────────────────────────────────────────────────────────────
-document.getElementById('btn-enviar').addEventListener('click', async () => {
-  if (!validar()) {
-    // Scroll al primer error
-    const primerError = document.querySelector('.error, .field-error.show, .firma-error.show');
-    if (primerError) primerError.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    return;
-  }
-
-  const btn     = document.getElementById('btn-enviar');
-  const texto   = document.getElementById('btn-texto');
-  const spinner = document.getElementById('spinner');
-  btn.disabled  = true;
-  texto.textContent = 'Guardando…';
-  spinner.style.display = 'block';
-
-  try {
-    const firmaBase64 = canvas.toDataURL('image/png');
-    const payload = {
-      nombres:    document.getElementById('nombres').value.trim(),
-      apellidos:  document.getElementById('apellidos').value.trim(),
-      tipo_doc:   document.getElementById('tipo-doc').value,
-      cedula:     document.getElementById('cedula').value.trim(),
-      telefono:   document.getElementById('telefono').value.trim(),
-      email:      document.getElementById('email').value.trim().toLowerCase(),
-      firma_img:  firmaBase64,
-      acepto_politica: true,
-      user_agent: navigator.userAgent,
+  function estadoInicial() {
+    return {
+      procedimientos: [],
+      paciente: {},
+      representante: null,
+      medico: {},
+      anestesiologo: null,
+      enfermero: null,
+      documentos: {} // clave -> { acepto, checklist, seleccion, firmas }
     };
+  }
 
-    const res = await fetch('/consentimiento/guardar', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+  // ── PASO 0: SELECCIÓN DE PROCEDIMIENTOS (STAFF) ─────────────────────────
+  var listaProc = document.getElementById('lista-procedimientos');
+  ORDEN_PROCEDIMIENTOS.forEach(function (key) {
+    var doc = DOCS[key];
+    var wrap = document.createElement('label');
+    wrap.className = 'check-wrap stack';
+    wrap.innerHTML =
+      '<input type="checkbox" data-proc="' + key + '" />' +
+      '<div class="check-box"></div>' +
+      '<span class="check-label"><strong>' + doc.etiquetaSeleccion + '</strong></span>';
+    var input = wrap.querySelector('input');
+    wrap.addEventListener('click', function () {
+      input.checked = !input.checked;
+      wrap.classList.toggle('checked', input.checked);
     });
+    listaProc.appendChild(wrap);
+  });
 
-    const data = await res.json();
+  document.getElementById('btn-staff-continuar').addEventListener('click', function () {
+    estado.procedimientos = ORDEN_PROCEDIMIENTOS.filter(function (key) {
+      var el = listaProc.querySelector('input[data-proc="' + key + '"]');
+      return el && el.checked;
+    });
+    document.getElementById('campos-anestesiologo').style.display = estado.procedimientos.indexOf('anestesia') > -1 ? 'grid' : 'none';
+    document.getElementById('campos-enfermero').style.display = estado.procedimientos.indexOf('venopuncion') > -1 ? 'grid' : 'none';
+    irAPantalla('pantalla-datos');
+  });
 
-    if (res.ok && data.folio) {
-      document.getElementById('folio-numero').textContent = data.folio;
-      document.getElementById('pantalla-form').style.display = 'none';
-      const exito = document.getElementById('pantalla-exito');
-      exito.style.display = 'flex';
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else {
-      throw new Error(data.mensaje || 'Error del servidor');
+  // ── PASO 1: DATOS DEL PACIENTE Y EQUIPO ─────────────────────────────────
+  var checkRepr = document.getElementById('check-wrap-representante');
+  var inputRepr = document.getElementById('representante-habilitado');
+  checkRepr.addEventListener('click', function () {
+    inputRepr.checked = !inputRepr.checked;
+    checkRepr.classList.toggle('checked', inputRepr.checked);
+    document.getElementById('subcampos-representante').classList.toggle('show', inputRepr.checked);
+  });
+
+  // Checkbox de aceptación de cada documento (elemento estático, se reutiliza en cada pantalla)
+  var checkAceptoDoc = document.getElementById('check-wrap-doc-acepto');
+  var inputAceptoDoc = document.getElementById('doc-acepto');
+  checkAceptoDoc.addEventListener('click', function () {
+    inputAceptoDoc.checked = !inputAceptoDoc.checked;
+    checkAceptoDoc.classList.toggle('checked', inputAceptoDoc.checked);
+  });
+
+  function mostrarError(id, show) {
+    var el = document.getElementById(id);
+    if (el) el.classList.toggle('show', !!show);
+  }
+  function marcarCampo(id, error) {
+    var el = document.getElementById(id);
+    if (el) el.classList.toggle('error', !!error);
+  }
+  function valorTrim(id) {
+    var el = document.getElementById(id);
+    return el ? el.value.trim() : '';
+  }
+
+  function validarDatos() {
+    var ok = true;
+
+    var nombres = valorTrim('nombres'), apellidos = valorTrim('apellidos'),
+        tipoDoc = valorTrim('tipo-doc'), cedula = valorTrim('cedula'),
+        telefono = valorTrim('telefono'), email = valorTrim('email');
+
+    function chequear(campo, valido, errId) {
+      marcarCampo(campo, !valido); mostrarError(errId, !valido);
+      if (!valido) ok = false;
+    }
+    chequear('nombres', !!nombres, 'err-nombres');
+    chequear('apellidos', !!apellidos, 'err-apellidos');
+    chequear('tipo-doc', !!tipoDoc, 'err-tipo-doc');
+    chequear('cedula', cedula.length >= 5, 'err-cedula');
+    chequear('telefono', telefono.replace(/\D/g, '').length >= 7, 'err-telefono');
+    var emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    chequear('email', emailRegex.test(email), 'err-email');
+
+    if (inputRepr.checked) {
+      chequear('representante-nombre', !!valorTrim('representante-nombre'), 'err-representante-nombre');
+      chequear('representante-doc', !!valorTrim('representante-doc'), 'err-representante-doc');
     }
 
-  } catch (err) {
-    console.error(err);
-    alert('Hubo un problema al guardar. Verifica tu conexión e intenta de nuevo.\n\n' + err.message);
-    btn.disabled = false;
-    texto.textContent = 'Confirmar y firmar';
-    spinner.style.display = 'none';
+    chequear('medico-nombre', !!valorTrim('medico-nombre'), 'err-medico-nombre');
+    chequear('medico-doc', !!valorTrim('medico-doc'), 'err-medico-doc');
+
+    if (estado.procedimientos.indexOf('anestesia') > -1) {
+      chequear('anestesiologo-nombre', !!valorTrim('anestesiologo-nombre'), 'err-anestesiologo-nombre');
+      chequear('anestesiologo-doc', !!valorTrim('anestesiologo-doc'), 'err-anestesiologo-doc');
+    }
+    if (estado.procedimientos.indexOf('venopuncion') > -1) {
+      chequear('enfermero-nombre', !!valorTrim('enfermero-nombre'), 'err-enfermero-nombre');
+      chequear('enfermero-doc', !!valorTrim('enfermero-doc'), 'err-enfermero-doc');
+    }
+
+    if (!ok) {
+      var primerError = document.querySelector('#pantalla-datos .error, #pantalla-datos .field-error.show');
+      if (primerError) primerError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    return ok;
   }
-});
+
+  document.getElementById('btn-datos-atras').addEventListener('click', function () {
+    irAPantalla('pantalla-staff');
+  });
+
+  document.getElementById('btn-datos-continuar').addEventListener('click', function () {
+    if (!validarDatos()) return;
+
+    estado.paciente = {
+      nombres: valorTrim('nombres'), apellidos: valorTrim('apellidos'),
+      tipo_doc: valorTrim('tipo-doc'), cedula: valorTrim('cedula'),
+      telefono: valorTrim('telefono'), email: valorTrim('email').toLowerCase()
+    };
+    estado.representante = inputRepr.checked ? {
+      nombre: valorTrim('representante-nombre'), documento: valorTrim('representante-doc'),
+      parentesco: valorTrim('representante-parentesco')
+    } : null;
+    estado.medico = { nombre: valorTrim('medico-nombre'), documento: valorTrim('medico-doc') };
+    estado.anestesiologo = estado.procedimientos.indexOf('anestesia') > -1
+      ? { nombre: valorTrim('anestesiologo-nombre'), documento: valorTrim('anestesiologo-doc') } : null;
+    estado.enfermero = estado.procedimientos.indexOf('venopuncion') > -1
+      ? { nombre: valorTrim('enfermero-nombre'), documento: valorTrim('enfermero-doc') } : null;
+
+    cola = ORDEN_GENERAL.concat(estado.procedimientos);
+    indiceDoc = 0;
+    mostrarDocumento(indiceDoc);
+    irAPantalla('pantalla-documento');
+  });
+
+  // ── NAVEGACIÓN ENTRE PANTALLAS ──────────────────────────────────────────
+  function irAPantalla(id) {
+    document.querySelectorAll('.pantalla').forEach(function (p) { p.classList.remove('activa'); });
+    document.getElementById(id).classList.add('activa');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    actualizarProgreso();
+  }
+
+  function actualizarProgreso() {
+    var header = document.getElementById('header-progreso');
+    var barra = document.getElementById('barra-progreso');
+    var fill = document.getElementById('barra-progreso-fill');
+    if (indiceDoc >= 0 && cola.length && document.getElementById('pantalla-documento').classList.contains('activa')) {
+      header.textContent = 'Documento ' + (indiceDoc + 1) + ' de ' + cola.length;
+      header.classList.add('show');
+      barra.classList.add('show');
+      fill.style.width = (((indiceDoc + 1) / cola.length) * 100) + '%';
+    } else {
+      header.classList.remove('show');
+      barra.classList.remove('show');
+    }
+  }
+
+  // ── SUSTITUCIÓN DE PLACEHOLDERS EN TEXTO ────────────────────────────────
+  function sustituir(texto) {
+    var medicoNombre = (estado.medico && estado.medico.nombre) ? estado.medico.nombre : '____________________';
+    return String(texto).replace(/\{\{medico\}\}/g, medicoNombre);
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  // ── RENDERIZAR CUERPO DEL DOCUMENTO ─────────────────────────────────────
+  function renderCuerpo(doc, registro) {
+    var html = '';
+    (doc.cuerpo || []).forEach(function (item, idx) {
+      if (item.tipo === 'h') {
+        html += '<h4>' + escapeHtml(sustituir(item.texto)) + '</h4>';
+      } else if (item.tipo === 'p') {
+        html += '<p>' + escapeHtml(sustituir(item.texto)) + '</p>';
+      } else if (item.tipo === 'lista') {
+        html += '<ul>' + item.items.map(function (t) { return '<li>' + escapeHtml(sustituir(t)) + '</li>'; }).join('') + '</ul>';
+      } else if (item.tipo === 'checklist') {
+        html += '<h4>' + escapeHtml(item.titulo) + (item.codigo ? ' <span style="opacity:.6;font-weight:400;">(' + item.codigo + ')</span>' : '') + '</h4>';
+        if (item.subtitulo) html += '<p style="margin-bottom:6px;">' + escapeHtml(item.subtitulo) + '</p>';
+        item.grupos.forEach(function (grupo, gIdx) {
+          html += '<div class="checklist-titulo">' + escapeHtml(grupo.titulo) + '</div>';
+          grupo.items.forEach(function (texto, iIdx) {
+            var itemId = 'chk_' + idx + '_' + gIdx + '_' + iIdx;
+            html += '<div class="checklist-item"><span>' + escapeHtml(texto) + '</span>' +
+              '<div class="pill-group" data-checklist-item="' + itemId + '">' +
+              '<span class="pill" data-valor="si">Sí</span>' +
+              '<span class="pill" data-valor="no">No</span>' +
+              '</div></div>';
+          });
+        });
+      } else if (item.tipo === 'seleccion') {
+        html += '<div class="checklist-titulo">' + escapeHtml(item.etiqueta) + '</div>';
+        html += '<div class="pill-group" data-seleccion="' + item.clave + '">' +
+          item.opciones.map(function (op) { return '<span class="pill" data-valor="' + escapeHtml(op) + '">' + escapeHtml(op) + '</span>'; }).join('') +
+          '</div>';
+      }
+    });
+    return html;
+  }
+
+  function activarInteraccionesCuerpo(contenedor, registro) {
+    contenedor.querySelectorAll('.pill-group[data-checklist-item]').forEach(function (grupo) {
+      var itemId = grupo.getAttribute('data-checklist-item');
+      grupo.querySelectorAll('.pill').forEach(function (pill) {
+        pill.addEventListener('click', function () {
+          grupo.querySelectorAll('.pill').forEach(function (p) { p.classList.remove('activo'); });
+          pill.classList.add('activo');
+          registro.checklist[itemId] = pill.getAttribute('data-valor');
+        });
+      });
+    });
+    contenedor.querySelectorAll('.pill-group[data-seleccion]').forEach(function (grupo) {
+      var clave = grupo.getAttribute('data-seleccion');
+      grupo.querySelectorAll('.pill').forEach(function (pill) {
+        pill.addEventListener('click', function () {
+          grupo.querySelectorAll('.pill').forEach(function (p) { p.classList.remove('activo'); });
+          pill.classList.add('activo');
+          registro.seleccion[clave] = pill.getAttribute('data-valor');
+        });
+      });
+    });
+  }
+
+  // ── PAD DE FIRMA (CANVAS) REUTILIZABLE ──────────────────────────────────
+  function crearFirmaPad(contenedor, rol, nombreFirmante) {
+    var wrapId = 'firma-wrap-' + rol;
+    var bloque = document.createElement('div');
+    bloque.className = 'firma-bloque';
+    bloque.innerHTML =
+      '<div class="firma-titulo"><span>' + escapeHtml(ROLES[rol].etiqueta) + '</span>' +
+        (nombreFirmante ? '<span class="nombre-firmante">' + escapeHtml(nombreFirmante) + '</span>' : '') +
+      '</div>' +
+      '<div class="firma-wrap" id="' + wrapId + '">' +
+        '<div class="firma-hint">' +
+          '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>' +
+          '<p>Firma aquí</p>' +
+        '</div>' +
+        '<canvas class="firma-canvas"></canvas>' +
+        '<div class="firma-actions"><button class="btn-limpiar" type="button">✕ Limpiar</button></div>' +
+      '</div>' +
+      '<div class="firma-error" id="err-' + wrapId + '">Falta la firma de ' + escapeHtml(ROLES[rol].etiqueta.replace('Firma del ', '').replace('Firma de la ', '')) + '</div>';
+    contenedor.appendChild(bloque);
+
+    var wrap = bloque.querySelector('.firma-wrap');
+    var hint = bloque.querySelector('.firma-hint');
+    var canvas = bloque.querySelector('canvas');
+    var ctx = canvas.getContext('2d');
+    var pintando = false;
+    var tocada = false;
+
+    function escalar() {
+      var rect = canvas.getBoundingClientRect();
+      var ratio = window.devicePixelRatio || 1;
+      canvas.width = Math.max(1, rect.width * ratio);
+      canvas.height = Math.max(1, rect.height * ratio);
+      ctx.scale(ratio, ratio);
+      ctx.lineWidth = 2.2;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = '#1C2B26';
+    }
+    setTimeout(escalar, 0);
+    window.addEventListener('resize', escalar);
+
+    function posicion(e) {
+      var r = canvas.getBoundingClientRect();
+      if (e.touches && e.touches.length) return { x: e.touches[0].clientX - r.left, y: e.touches[0].clientY - r.top };
+      return { x: e.clientX - r.left, y: e.clientY - r.top };
+    }
+    function iniciar(e) {
+      e.preventDefault();
+      pintando = true;
+      var p = posicion(e);
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      hint.style.opacity = '0';
+      wrap.classList.add('activo');
+      tocada = true;
+    }
+    function dibujar(e) {
+      e.preventDefault();
+      if (!pintando) return;
+      var p = posicion(e);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+    }
+    function detener() { pintando = false; }
+
+    canvas.addEventListener('mousedown', iniciar, { passive: false });
+    canvas.addEventListener('mousemove', dibujar, { passive: false });
+    canvas.addEventListener('mouseup', detener);
+    canvas.addEventListener('mouseleave', detener);
+    canvas.addEventListener('touchstart', iniciar, { passive: false });
+    canvas.addEventListener('touchmove', dibujar, { passive: false });
+    canvas.addEventListener('touchend', detener);
+
+    bloque.querySelector('.btn-limpiar').addEventListener('click', function () {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      hint.style.opacity = '1';
+      wrap.classList.remove('activo');
+      tocada = false;
+    });
+
+    return {
+      rol: rol,
+      vacia: function () { return !tocada; },
+      dataURL: function () { return canvas.toDataURL('image/png'); },
+      mostrarError: function (show) { mostrarError('err-' + wrapId, show); }
+    };
+  }
+
+  // ── MOSTRAR UN DOCUMENTO DE LA COLA ─────────────────────────────────────
+  function mostrarDocumento(idx) {
+    var key = cola[idx];
+    var doc = DOCS[key];
+    if (!estado.documentos[key]) {
+      estado.documentos[key] = { acepto: false, checklist: {}, seleccion: {}, firmas: {} };
+    }
+    var registro = estado.documentos[key];
+
+    document.getElementById('doc-titulo').textContent = doc.titulo;
+    var chip = document.getElementById('doc-codigo');
+    if (doc.codigo) { chip.textContent = doc.codigo; chip.style.display = 'inline-block'; }
+    else { chip.style.display = 'none'; }
+
+    var cuerpoEl = document.getElementById('doc-cuerpo');
+    cuerpoEl.innerHTML = renderCuerpo(doc, registro);
+    cuerpoEl.scrollTop = 0;
+    activarInteraccionesCuerpo(cuerpoEl, registro);
+
+    var aceptWrap = document.getElementById('doc-aceptacion-wrap');
+    var checkAcepto = document.getElementById('check-wrap-doc-acepto');
+    var inputAcepto = document.getElementById('doc-acepto');
+    inputAcepto.checked = false;
+    checkAcepto.classList.remove('checked');
+    mostrarError('err-doc-acepto', false);
+    if (doc.requiereAceptacion) {
+      aceptWrap.style.display = 'block';
+      document.getElementById('doc-acepto-texto').innerHTML = doc.textoAceptacion;
+    } else {
+      aceptWrap.style.display = 'none';
+    }
+
+    // Firmas requeridas para este documento (según habilitación de representante)
+    var contenedorFirmas = document.getElementById('doc-firmas-contenedor');
+    contenedorFirmas.innerHTML = '';
+    padsActuales = {};
+    var rolesDoc = (doc.firmantes || []).filter(function (rol) {
+      if (rol === 'representante') return !!estado.representante;
+      return true;
+    });
+    document.getElementById('doc-firmas-section').style.display = rolesDoc.length ? 'block' : 'none';
+
+    rolesDoc.forEach(function (rol) {
+      var nombre = null;
+      if (rol === 'representante' && estado.representante) nombre = estado.representante.nombre;
+      if (rol === 'medico' && estado.medico) nombre = estado.medico.nombre;
+      if (rol === 'anestesiologo' && estado.anestesiologo) nombre = estado.anestesiologo.nombre;
+      if (rol === 'enfermero' && estado.enfermero) nombre = estado.enfermero.nombre;
+      padsActuales[rol] = crearFirmaPad(contenedorFirmas, rol, nombre);
+    });
+
+    document.getElementById('btn-doc-atras').style.visibility = idx === 0 ? 'hidden' : 'visible';
+    document.getElementById('btn-doc-texto').textContent = (idx === cola.length - 1) ? 'Finalizar y guardar admisión' : 'Firmar y continuar';
+
+    actualizarProgreso();
+  }
+
+  function validarDocumentoActual() {
+    var key = cola[indiceDoc];
+    var doc = DOCS[key];
+    var ok = true;
+
+    if (doc.requiereAceptacion) {
+      var acepto = document.getElementById('doc-acepto').checked;
+      mostrarError('err-doc-acepto', !acepto);
+      if (!acepto) ok = false;
+    }
+
+    Object.keys(padsActuales).forEach(function (rol) {
+      var pad = padsActuales[rol];
+      var vacia = pad.vacia();
+      pad.mostrarError(vacia);
+      if (vacia) ok = false;
+    });
+
+    if (!ok) {
+      var primerError = document.querySelector('#pantalla-documento .field-error.show, #pantalla-documento .firma-error.show');
+      if (primerError) primerError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    return ok;
+  }
+
+  document.getElementById('btn-doc-atras').addEventListener('click', function () {
+    if (indiceDoc === 0) { irAPantalla('pantalla-datos'); return; }
+    indiceDoc -= 1;
+    mostrarDocumento(indiceDoc);
+  });
+
+  document.getElementById('btn-doc-continuar').addEventListener('click', function () {
+    if (!validarDocumentoActual()) return;
+
+    var key = cola[indiceDoc];
+    var doc = DOCS[key];
+    var registro = estado.documentos[key];
+    registro.acepto = doc.requiereAceptacion ? document.getElementById('doc-acepto').checked : true;
+    registro.firmas = {};
+    Object.keys(padsActuales).forEach(function (rol) {
+      registro.firmas[rol] = padsActuales[rol].dataURL();
+    });
+
+    if (indiceDoc < cola.length - 1) {
+      indiceDoc += 1;
+      mostrarDocumento(indiceDoc);
+    } else {
+      enviarAdmision();
+    }
+  });
+
+  // ── ENVÍO FINAL ──────────────────────────────────────────────────────────
+  function enviarAdmision() {
+    var btn = document.getElementById('btn-doc-continuar');
+    var texto = document.getElementById('btn-doc-texto');
+    var spinner = document.getElementById('spinner-doc');
+    btn.disabled = true;
+    texto.textContent = 'Guardando…';
+    spinner.style.display = 'block';
+
+    var payload = {
+      paciente: estado.paciente,
+      representante: estado.representante,
+      medico: estado.medico,
+      anestesiologo: estado.anestesiologo,
+      enfermero: estado.enfermero,
+      procedimientos: estado.procedimientos,
+      documentos: cola.map(function (key) {
+        var registro = estado.documentos[key];
+        return {
+          key: key,
+          titulo: DOCS[key].titulo,
+          codigo: DOCS[key].codigo,
+          acepto: registro.acepto,
+          checklist: registro.checklist,
+          seleccion: registro.seleccion,
+          firmas: registro.firmas
+        };
+      }),
+      user_agent: navigator.userAgent
+    };
+
+    fetch('/consentimiento/guardar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function (res) {
+      return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+    }).then(function (r) {
+      if (r.ok && r.data.folio) {
+        document.getElementById('folio-numero').textContent = r.data.folio;
+        irAPantalla('pantalla-exito');
+        document.getElementById('header-progreso').classList.remove('show');
+        document.getElementById('barra-progreso').classList.remove('show');
+      } else {
+        throw new Error(r.data.mensaje || 'Error del servidor');
+      }
+    }).catch(function (err) {
+      console.error(err);
+      alert('Hubo un problema al guardar. Verifica la conexión e intenta de nuevo.\n\n' + err.message);
+    }).finally(function () {
+      btn.disabled = false;
+      texto.textContent = (indiceDoc === cola.length - 1) ? 'Finalizar y guardar admisión' : 'Firmar y continuar';
+      spinner.style.display = 'none';
+    });
+  }
+
+  document.getElementById('btn-nuevo-paciente').addEventListener('click', function () {
+    estado = estadoInicial();
+    cola = [];
+    indiceDoc = -1;
+    document.querySelectorAll('#lista-procedimientos input[type="checkbox"]').forEach(function (el) {
+      el.checked = false;
+      el.closest('.check-wrap').classList.remove('checked');
+    });
+    document.querySelectorAll('#pantalla-datos input, #pantalla-datos select').forEach(function (el) { el.value = ''; });
+    inputRepr.checked = false;
+    checkRepr.classList.remove('checked');
+    document.getElementById('subcampos-representante').classList.remove('show');
+    irAPantalla('pantalla-staff');
+  });
+})();
 </script>
 </body>
 </html>

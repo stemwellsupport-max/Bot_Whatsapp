@@ -7,7 +7,7 @@
 const { sendMessage, sendButtons, sendList } = require('../services/whatsapp');
 const { upsertContactoBasico, logMensaje } = require('../services/postgres');
 const { getSesion, setSesion } = require('../services/sesiones');
-const { responderConIA, detectarIdioma } = require('../services/ia-local');
+const { responderConIA, detectarIdioma, consumioFalloTotal } = require('../services/ia-local');
 const { detectarIntencion } = require('../services/intents');
 const agenda = require('../services/agenda');
 const identidad = require('../services/identidad');
@@ -277,7 +277,7 @@ async function getDoctoresActivos() {
 function parecePreguntaLibre(texto) {
   const t = normalizarAux(texto);
   return /[?\u00bf]/.test(texto) ||
-    /\b(que|como|cual|cuales|por que|puede|pueden|sirve|sirven|ayuda|ayudar|riesgo|peligro|contraindic|cancer|dolor|rodilla|hombro|espalda|celula|stem ?cell|prp|exosoma|foto\s*biomod|laser|tratamiento|procedimiento|difference|what|how|why|can|could|danger|risk|pain|knee|shoulder|back|cancer|certif)\b/.test(t);
+    /\b(que|como|cual|cuales|por que|puede|pueden|sirve|sirven|ayuda|ayudar|riesgo|peligro|contraindic|cancer|dolor|rodilla|hombro|espalda|celula|stem ?cell|prp|exosoma|foto\s*biomod|laser|tratamiento|procedimiento|difference|what|how|why|can|could|danger|risk|pain|knee|shoulder|back|cancer|certif|ubicacion|ubicaciones|direccion|donde|queda|llegar|mapa|address|location|where)\b/.test(t);
 }
 
 function esEntradaEsperada(st, texto) {
@@ -449,6 +449,24 @@ async function registrarLeadNuevo({ nombre, telefono, email, fecha, hora, doctor
   }
 }
 
+// Escala la conversacion a un asesor humano cuando el bot detecta que no
+// esta logrando resolver la consulta (en vez de solo cuando el paciente lo
+// pide explicitamente). `motivo` queda registrado en wa_advisor_requests
+// para que el asesor entienda por que se activo la cola sin pedirlo el paciente.
+async function escalarPorFalloBot(telefono, nombre, idioma, texto, motivo) {
+  const dentroDeHorario = isBusinessHours();
+  const advisor = await requestAdvisor(telefono, nombre, idioma, `[AUTO:${motivo}] ${texto}`, { pauseBot: dentroDeHorario });
+  await agenda.setEstadoAgenda(telefono, { paso: 'menu_principal' });
+  if (!dentroDeHorario) {
+    return idioma === 'en'
+      ? 'I notice I have not been able to fully resolve this. Our advisors are available from 8:30 AM to 6:00 PM and I have already queued your request for then. In the meantime I can keep helping with what I can.'
+      : 'Veo que no he logrado resolver esto del todo. Nuestros asesores atienden de 8:30 a.m. a 6:00 p.m. y ya dejé tu solicitud en cola para ese horario. Mientras tanto, sigo aquí para lo que pueda ayudarte.';
+  }
+  return idioma === 'en'
+    ? `I notice I have not been able to fully resolve this. Let me connect you with ${advisor ? advisor.nombre : 'one of our advisors'} — they will contact you as soon as possible.`
+    : `Veo que no he logrado resolver esto del todo. Te estoy conectando con ${advisor ? advisor.nombre : 'un asesor'}. Se comunicará contigo lo más pronto posible.`;
+}
+
 async function handleIncomingMessage(message, contact, options = {}) {
   const telefono = telefonoWhatsAppValido(message?.from || contact?.wa_id);
   const nombre = contact?.profile?.name || '';
@@ -501,9 +519,18 @@ async function handleIncomingMessage(message, contact, options = {}) {
     let respuesta = null;        // texto simple
     let botonesRespuesta = null; // {botones:[], texto}
     let listRespuesta = null;    // {texto, buttonLabel, sections}
+    let escalado = false;        // true si ya se escalo a un asesor (evita el CTA redundante de abajo)
     const textoGlobal = normalizarAux(texto);
     const intencionGlobal = detectarIntencion(texto);
     const interrumpeFlujo = !['menu_principal', 'validado', 'validado_nuevo', 'confirmar_cancelar'].includes(st.paso);
+
+    // El paciente repite (casi) el mismo mensaje varias veces seguidas: senal
+    // de que el bot no esta logrando resolverle, sin importar por que camino
+    // del flujo entre. Se ignoran mensajes cortos (si/no/gracias) para evitar
+    // falsos positivos en confirmaciones normales del flujo de agenda.
+    const esRepeticion = textoGlobal.length >= 4 && textoGlobal === (sesion.ultimo_msg_norm || '');
+    const repeticiones = esRepeticion ? (sesion.repeticiones || 0) + 1 : 0;
+    await setSesion(telefono, { ultimo_msg_norm: textoGlobal, repeticiones });
 
     // ═══════════════════════════════════════════════════════
     // NUEVO FLUJO GUIADO POR BOTONES
@@ -533,6 +560,13 @@ async function handleIncomingMessage(message, contact, options = {}) {
           : 'Nuestros asesores atienden de 8:30 a.m. a 6:00 p.m. Ya dejé registrada tu solicitud y alguien te va a contactar apenas empiece ese horario. Mientras tanto puedo resolver dudas, o ayudarte a agendar, reagendar o cancelar una cita.';
         await agenda.setEstadoAgenda(telefono, { paso: 'menu_principal' });
       }
+    }
+    // El paciente escribió (casi) lo mismo 3 veces seguidas sin que el bot lo
+    // resolviera: se escala en vez de intentar una cuarta vez.
+    else if (repeticiones >= 2) {
+      await setSesion(telefono, { repeticiones: 0 });
+      respuesta = await escalarPorFalloBot(telefono, nombre, idioma, texto, 'mensaje_repetido');
+      escalado = true;
     }
     else if (st.paso && st.paso !== 'menu_principal' && /^(hola|hello|hey|buenas|buenos dias|buenas tardes)$/.test(textoGlobal)) {
       respuesta = (idioma === 'en' ? 'Hello! We can continue whenever you are ready.' : 'Hola. Podemos continuar cuando quieras.') + pistaParaRetomar(st, idioma);
@@ -573,9 +607,15 @@ async function handleIncomingMessage(message, contact, options = {}) {
       const consultaIA = contexto.paso === 'post_agendado' && contexto.citaConfirmada
         ? `[The patient already has a registered appointment. Do not recommend booking again and do not send a booking link. Answer only the new question.]\n${texto}`
         : texto;
+      const usaIA = !seguimiento && !segura;
       respuesta = seguimiento || segura || await responderConIA(consultaIA, nombre, telefono, idioma, sendMessage);
-      if (!seguimiento) respuesta += pistaParaRetomar(contexto, idioma);
-      if (!contexto.paso) await agenda.setEstadoAgenda(telefono, { paso: 'menu_principal' });
+      if (usaIA && consumioFalloTotal(telefono)) {
+        respuesta = await escalarPorFalloBot(telefono, nombre, idioma, texto, 'ia_sin_respuesta');
+        escalado = true;
+      } else {
+        if (!seguimiento) respuesta += pistaParaRetomar(contexto, idioma);
+        if (!contexto.paso) await agenda.setEstadoAgenda(telefono, { paso: 'menu_principal' });
+      }
     }
 
     // ── PASO: MENÚ PRINCIPAL ──
@@ -892,13 +932,17 @@ async function handleIncomingMessage(message, contact, options = {}) {
         } else {
           // Si no es flujo, usar IA
           respuesta = await responderConIA(texto, nombre, telefono, idioma, sendMessage);
+          if (consumioFalloTotal(telefono)) {
+            respuesta = await escalarPorFalloBot(telefono, nombre, idioma, texto, 'ia_sin_respuesta');
+            escalado = true;
+          }
         }
       }
     }
 
     // ═══ ENVÍO DE RESPUESTA (texto, botones o lista) ═══
     const pasosAgenda = ['pedir_tipo','pedir_doctor','pedir_correo','validado','validado_nuevo','seleccionar_dia','seleccionar_hora','confirmar_cancelar','post_agendado'];
-    if (respuesta && !pasosAgenda.includes(st.paso) && intencionGlobal !== 'hablar_asesor') {
+    if (respuesta && !pasosAgenda.includes(st.paso) && intencionGlobal !== 'hablar_asesor' && !escalado) {
       respuesta = agregarOpcionesContacto(respuesta, idioma);
     }
     if (botonesRespuesta && botonesRespuesta.botones && botonesRespuesta.botones.length > 0) {

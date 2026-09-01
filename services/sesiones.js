@@ -21,6 +21,8 @@ const SESION_DEFAULT = {
   ultimo_cta:         null,
   hizo_pregunta:      false,
   esperando:          null,   // 'nombre' | 'email' | 'motivo' | 'datos_lead'
+  ultimo_msg_norm:    null,   // texto normalizado del ultimo mensaje entrante, para detectar repeticion
+  repeticiones:       0,      // veces consecutivas que el paciente repite la misma consulta sin avanzar
 };
 
 async function getSesion(telefono) {

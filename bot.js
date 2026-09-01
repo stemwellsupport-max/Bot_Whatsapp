@@ -6,6 +6,7 @@ const { Pool } = require('pg');
 const PDFDocument = require('pdfkit');
 const QRCode = require('qrcode');
 const { handleIncomingMessage } = require('./commands/handlers');
+const DOCUMENTOS_ADMISION = require('./public/consentimiento/documentos.js');
 const { initDB } = require('./services/postgres');
 const { initDB: initAgendaDB } = require('./services/agenda');
 const adminRouter = require('./admin/router');
@@ -119,7 +120,7 @@ app.get('/consentimiento/qr', async (req, res) => {
 });
 
 // ============================================
-// RUTA: GUARDAR CONSENTIMIENTO
+// RUTA: GUARDAR ADMISIÓN (documentos + firmas del paciente)
 // ============================================
 app.post('/consentimiento/guardar', async (req, res) => {
   const pool = new Pool({
@@ -129,12 +130,36 @@ app.post('/consentimiento/guardar', async (req, res) => {
     user: process.env.PG_USER || 'crm_user',
     password: process.env.PG_PASSWORD || 'crm2024',
   });
+  const client = await pool.connect();
 
   try {
-    const { nombres, apellidos, tipo_doc, cedula, telefono, email, firma_img } = req.body;
+    const { paciente, representante, medico, anestesiologo, enfermero, procedimientos, documentos, user_agent } = req.body;
 
-    if (!nombres || !apellidos || !tipo_doc || !cedula || !telefono || !email || !firma_img) {
-      return res.status(400).json({ mensaje: 'Faltan campos obligatorios.' });
+    if (!paciente || !paciente.nombres || !paciente.apellidos || !paciente.tipo_doc || !paciente.cedula || !paciente.telefono || !paciente.email) {
+      return res.status(400).json({ mensaje: 'Faltan datos del paciente.' });
+    }
+    if (!medico || !medico.nombre || !medico.documento) {
+      return res.status(400).json({ mensaje: 'Falta el médico tratante.' });
+    }
+    if (!Array.isArray(documentos) || !documentos.length) {
+      return res.status(400).json({ mensaje: 'No se recibieron documentos para guardar.' });
+    }
+
+    const DOCS = DOCUMENTOS_ADMISION.DOCUMENTOS;
+    for (const d of documentos) {
+      const def = DOCS[d.key];
+      if (!def) {
+        return res.status(400).json({ mensaje: `Documento desconocido: ${d.key}` });
+      }
+      const rolesRequeridos = (def.firmantes || []).filter((rol) => rol !== 'representante' || !!representante);
+      for (const rol of rolesRequeridos) {
+        if (!d.firmas || !d.firmas[rol]) {
+          return res.status(400).json({ mensaje: `Falta la firma (${rol}) en "${def.titulo}".` });
+        }
+      }
+      if (def.requiereAceptacion && !d.acepto) {
+        return res.status(400).json({ mensaje: `Falta la aceptación de "${def.titulo}".` });
+      }
     }
 
     const folio = 'SW-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -144,225 +169,208 @@ app.post('/consentimiento/guardar', async (req, res) => {
       year: 'numeric'
     });
 
-    await pool.query(
-      `INSERT INTO consentimientos (folio, nombres, apellidos, tipo_doc, cedula, telefono, email, firma_img, acepto_politica)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)`,
-      [folio, nombres, apellidos, tipo_doc, cedula, telefono, email, firma_img]
+    await client.query('BEGIN');
+
+    const insertAdmision = await client.query(
+      `INSERT INTO admisiones
+        (folio, nombres, apellidos, tipo_doc, cedula, telefono, email, procedimientos,
+         representante_nombre, representante_doc, representante_parentesco,
+         medico_nombre, medico_doc, anestesiologo_nombre, anestesiologo_doc,
+         enfermero_nombre, enfermero_doc, user_agent)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+       RETURNING id`,
+      [
+        folio, paciente.nombres, paciente.apellidos, paciente.tipo_doc, paciente.cedula, paciente.telefono, paciente.email,
+        (procedimientos || []).join(','),
+        representante ? representante.nombre : '', representante ? representante.documento : '', representante ? (representante.parentesco || '') : '',
+        medico.nombre, medico.documento,
+        anestesiologo ? anestesiologo.nombre : '', anestesiologo ? anestesiologo.documento : '',
+        enfermero ? enfermero.nombre : '', enfermero ? enfermero.documento : '',
+        user_agent || ''
+      ]
     );
+    const admisionId = insertAdmision.rows[0].id;
+
+    for (const d of documentos) {
+      await client.query(
+        `INSERT INTO admisiones_documentos
+          (admision_id, documento_key, documento_titulo, documento_codigo, acepto, checklist, seleccion,
+           firma_paciente, firma_representante, firma_medico, firma_anestesiologo, firma_enfermero)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        [
+          admisionId, d.key, d.titulo, d.codigo || '', !!d.acepto,
+          JSON.stringify(d.checklist || {}), JSON.stringify(d.seleccion || {}),
+          (d.firmas && d.firmas.paciente) || null,
+          (d.firmas && d.firmas.representante) || null,
+          (d.firmas && d.firmas.medico) || null,
+          (d.firmas && d.firmas.anestesiologo) || null,
+          (d.firmas && d.firmas.enfermero) || null,
+        ]
+      );
+    }
+
+    await client.query('COMMIT');
 
     const pdfDir = path.join(__dirname, 'public', 'consentimientos');
     if (!fs.existsSync(pdfDir)) fs.mkdirSync(pdfDir, { recursive: true });
-    
     const pdfPath = path.join(pdfDir, `${folio}.pdf`);
-    const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
-    const stream = fs.createWriteStream(pdfPath);
-    doc.pipe(stream);
 
-    const verde = '#00B2C2';
-    const gris = '#555555';
-    const negro = '#222222';
+    generarPDFAdmision({ pdfPath, folio, fechaActual, paciente, representante, medico, anestesiologo, enfermero, documentos })
+      .then(() => console.log(`✅ PDF de admisión generado: ${pdfPath}`))
+      .catch((err) => console.error('❌ Error generando PDF de admisión:', err));
 
-    const logoPath = path.join(__dirname, 'public', 'images', 'stemwell_header.png');
-    if (fs.existsSync(logoPath)) {
-      doc.image(logoPath, 0, 0, { width: doc.page.width });
-    }
-    doc.y = 110;
+    console.log(`✅ Admisión guardada: ${folio} - ${paciente.nombres} ${paciente.apellidos} (${documentos.length} documentos)`);
 
-    doc.fontSize(16).font('Helvetica-Bold').fillColor(verde)
-       .text('POLÍTICA DE TRATAMIENTO DE DATOS PERSONALES – STEMWELL', { align: 'center' });
-    doc.moveDown(1);
-
-    const politicaTexto = `En STEMWELL, entendemos que la información personal de nuestros pacientes, usuarios, trabajadores, proveedores y aliados debe ser tratada con responsabilidad, confidencialidad y respeto. Por esta razón, hemos adoptado la presente Política de Tratamiento de Datos Personales, mediante la cual informamos de manera clara cómo recolectamos, utilizamos, almacenamos, protegemos y, cuando sea necesario, compartimos la información personal suministrada en el desarrollo de nuestras actividades asistenciales, administrativas y operativas.
-
-Esta Política se desarrolla conforme a la Constitución Política de Colombia, la Ley 1581 de 2012, el Decreto 1377 de 2013, la Ley 23 de 1981, la Resolución 1995 de 1999 y demás normas aplicables relacionadas con la protección de datos personales, la confidencialidad de la información y la reserva de la historia clínica.
-
-¿QUIÉN ES EL RESPONSABLE DEL TRATAMIENTO DE LOS DATOS?
-
-El responsable del tratamiento de los datos personales es STEMWELL, identificada con NIT 900.439.194-0, con domicilio en la Carrera 13 No. 118-08 de la ciudad de Bogotá D.C.
-
-Para cualquier consulta, actualización, solicitud o reclamo relacionado con el tratamiento de datos personales, los titulares podrán comunicarse a través de los siguientes canales:
-
-• Correo electrónico: info@stemwell.co
-• Teléfono: +57 310 406 8755
-
-¿QUÉ INFORMACIÓN RECOPILAMOS Y PARA QUÉ LA USAMOS?
-
-En STEMWELL recolectamos únicamente la información necesaria para prestar adecuadamente nuestros servicios y cumplir nuestras obligaciones legales y contractuales.
-
-En el caso de pacientes y usuarios, los datos personales se utilizan para la prestación de servicios de salud, realización de valoraciones médicas, exámenes médicos, diagnósticos, tratamientos, procedimientos, seguimientos clínicos y procesos de rehabilitación. Asimismo, la información permite elaborar, actualizar y custodiar la historia clínica y demás registros asistenciales requeridos por la normatividad vigente.
-
-También utilizamos la información para gestionar citas médicas, autorizaciones, remisiones, incapacidades, certificados, facturación, procesos administrativos y reportes obligatorios ante entidades del Sistema General de Seguridad Social en Salud, autoridades regulatorias y organismos de control.
-
-Adicionalmente, los datos podrán ser utilizados para atender peticiones, quejas, reclamos, auditorías internas y externas, procesos de calidad y demás actividades necesarias para garantizar una adecuada prestación de los servicios de salud.
-
-Respecto de trabajadores, proveedores y contratistas, la información personal podrá ser utilizada para procesos de selección, contratación, afiliaciones al sistema de seguridad social, control de acceso, cumplimiento de obligaciones laborales, administrativas, financieras y contractuales.
-
-TRATAMIENTO DE DATOS SENSIBLES Y DE SALUD
-
-Algunos de los datos que STEMWELL trata corresponden a datos sensibles, especialmente aquellos relacionados con la salud. Este tipo de información será manejada bajo estrictos estándares de confidencialidad, seguridad y acceso restringido.
-
-El titular no está obligado a autorizar el tratamiento de datos sensibles; sin embargo, en materia asistencial, cierta información resulta indispensable para garantizar una adecuada atención médica y la continuidad del tratamiento. En caso de no suministrarse información esencial, podrían existir limitaciones para la prestación del servicio de salud.
-
-La información clínica y la historia clínica solo serán utilizadas para fines asistenciales, administrativos y legales autorizados por la normatividad vigente.
-
-AUTORIZACIÓN PARA EL TRATAMIENTO DE DATOS
-
-La autorización para el tratamiento de datos personales podrá obtenerse mediante formularios físicos o electrónicos, formatos de admisión, consentimientos informados, contratos, grabaciones de llamadas o cualquier conducta inequívoca que permita concluir que el titular otorgó su consentimiento.
-
-El titular podrá solicitar la revocatoria de la autorización o la supresión de sus datos cuando sea procedente legalmente. No obstante, la información que deba conservarse por disposición legal, como la historia clínica, continuará siendo almacenada durante el término exigido por la normatividad aplicable.
-
-¿CON QUIÉN PODEMOS COMPARTIR LA INFORMACIÓN?
-
-Para garantizar la adecuada prestación de los servicios de salud y cumplir obligaciones legales, STEMWELL podrá compartir información personal con EPS, IPS aliadas, aseguradoras, laboratorios clínicos, entidades regulatorias, autoridades administrativas o judiciales, así como proveedores tecnológicos y plataformas utilizadas para la operación de los servicios.
-
-En todos los casos, la Compañía exigirá que terceros implementen medidas adecuadas de seguridad y confidencialidad para proteger la información personal.
-
-DERECHOS DE LOS TITULARES
-
-Toda persona cuyos datos personales sean tratados por STEMWELL tiene derecho a:
-
-• Conocer, actualizar y rectificar su información personal.
-• Solicitar prueba de la autorización otorgada.
-• Ser informada sobre el uso dado a sus datos.
-• Presentar consultas, solicitudes o reclamos.
-• Solicitar la supresión de sus datos cuando sea legalmente procedente.
-• Presentar quejas ante la Superintendencia de Industria y Comercio.
-• Acceder gratuitamente a sus datos personales.
-
-ATENCIÓN DE CONSULTAS Y RECLAMOS
-
-Las consultas o reclamos relacionados con protección de datos personales podrán presentarse a través del correo electrónico info@stemwell.co.
-
-Las consultas serán atendidas dentro de los diez (10) días hábiles siguientes a su recepción. Los reclamos serán respondidos dentro de los quince (15) días hábiles, conforme a los términos establecidos en la legislación colombiana.
-
-SEGURIDAD DE LA INFORMACIÓN
-
-STEMWELL adopta medidas administrativas, técnicas y tecnológicas orientadas a proteger la información personal contra pérdida, alteración, acceso no autorizado, uso indebido o cualquier tratamiento fraudulento.
-
-Entre estas medidas se incluyen controles de acceso físico y digital, protocolos de confidencialidad, acceso restringido a historias clínicas, almacenamiento seguro de información y mecanismos de respaldo y protección de datos.
-
-HISTORIA CLÍNICA
-
-La historia clínica es un documento privado, obligatorio y sometido a reserva legal, conforme a la Ley 23 de 1981 y la Resolución 1995 de 1999.
-
-Únicamente podrán acceder a ella el paciente, las personas autorizadas por este, el personal asistencial involucrado directamente en su atención y las autoridades legalmente facultadas.
-
-STEMWELL conservará las historias clínicas durante el término exigido por la normatividad vigente.
-
-VIGENCIA Y MODIFICACIONES
-
-La presente Política rige a partir de su publicación y permanecerá vigente mientras STEMWELL realice tratamiento de datos personales.
-
-La Compañía podrá actualizar o modificar esta Política en cualquier momento. Cualquier cambio será informado a través de los canales oficiales de STEMWELL.
-`;
-
-    const lineas = politicaTexto.split('\n');
-    const titulosNegrilla = [
-      '¿QUIÉN ES EL RESPONSABLE DEL TRATAMIENTO DE LOS DATOS?',
-      '¿QUÉ INFORMACIÓN RECOPILAMOS Y PARA QUÉ LA USAMOS?',
-      'TRATAMIENTO DE DATOS SENSIBLES Y DE SALUD',
-      'AUTORIZACIÓN PARA EL TRATAMIENTO DE DATOS',
-      '¿CON QUIÉN PODEMOS COMPARTIR LA INFORMACIÓN?',
-      'DERECHOS DE LOS TITULARES',
-      'ATENCIÓN DE CONSULTAS Y RECLAMOS',
-      'SEGURIDAD DE LA INFORMACIÓN',
-      'HISTORIA CLÍNICA',
-      'VIGENCIA Y MODIFICACIONES',
-    ];
-
-    for (const linea of lineas) {
-      const texto = linea.trim();
-      if (!texto) {
-        doc.moveDown(0.4);
-        continue;
-      }
-      const esTitulo = titulosNegrilla.includes(texto);
-      doc.fontSize(esTitulo ? 10 : 9.5)
-         .font(esTitulo ? 'Helvetica-Bold' : 'Helvetica')
-         .fillColor(esTitulo ? verde : negro)
-         .text(texto, { align: esTitulo ? 'left' : 'justify', lineGap: 3 });
-      if (esTitulo) doc.moveDown(0.3);
-    }
-
-    doc.moveDown(1);
-
-    doc.moveTo(50, doc.y).lineTo(doc.page.width - 50, doc.y).strokeColor(verde).stroke();
-    doc.moveDown(1);
-
-    const nombreCompleto = `${nombres} ${apellidos}`;
-    const tipoDocTexto = tipo_doc === 'CC' ? 'Cédula de Ciudadanía' : 
-                         tipo_doc === 'CE' ? 'Cédula de Extranjería' : 
-                         tipo_doc === 'PA' ? 'Pasaporte' : 
-                         tipo_doc === 'TI' ? 'Tarjeta de Identidad' : 'Documento de identidad';
-
-    doc.fontSize(11).font('Helvetica-Bold').fillColor(verde)
-       .text('AUTORIZACIÓN DEL TITULAR', { align: 'center' });
-    doc.moveDown(0.8);
-
-    doc.fontSize(10).font('Helvetica').fillColor(negro)
-       .text(`Yo, ${nombreCompleto}, identificado con ${tipoDocTexto} No. ${cedula}, manifiesto que he leído la Política de Tratamiento de Datos Personales y autorizo de manera previa, expresa, informada e inequívoca a STEMWELL para el tratamiento de mis datos personales conforme a las finalidades allí descritas.`, { align: 'justify', lineGap: 4 });
-    
-    doc.moveDown(0.5);
-    doc.fontSize(10).font('Helvetica-Bold')
-       .text(`Fecha de autorización: ${fechaActual}`);
-    
-    doc.moveDown(1.5);
-
-    doc.fontSize(9).font('Helvetica').fillColor(gris)
-       .text(`Teléfono: ${telefono}`, { continued: true })
-       .text(`   |   Correo: ${email}`, { continued: true })
-       .text(`   |   Folio: ${folio}`);
-    
-    doc.moveDown(2);
-
-    doc.fontSize(10).font('Helvetica-Bold').fillColor(verde)
-       .text('Firma del Titular:');
-    doc.moveDown(0.5);
-    
-    if (firma_img && firma_img.startsWith('data:image')) {
-      const base64Data = firma_img.replace(/^data:image\/\w+;base64,/, '');
-      const imgBuffer = Buffer.from(base64Data, 'base64');
-      doc.image(imgBuffer, { width: 200, height: 80 });
-    }
-    
-    doc.moveDown(0.5);
-    doc.fontSize(8).fillColor(gris)
-       .text('(Firma digital registrada conforme a la Ley 527 de 1999)');
-    
-    doc.moveDown(1.5);
-
-    const pieY = doc.page.height - 50;
-    doc.moveTo(50, pieY - 10).lineTo(doc.page.width - 50, pieY - 10).strokeColor(verde).stroke();
-    
-    doc.fontSize(8).fillColor(gris)
-       .text('STEMWELL · NIT 900.439.194-0 · Carrera 13 No. 118-08 · Bogotá D.C.', 50, pieY, { align: 'center' })
-       .text('info@stemwell.co · +57 310 406 8755', 50, pieY + 10, { align: 'center' })
-       .text(`Documento generado el ${fechaActual} · Folio: ${folio}`, 50, pieY + 20, { align: 'center' });
-
-    doc.end();
-
-    stream.on('finish', () => {
-      console.log(`✅ PDF generado: ${pdfPath}`);
-    });
-
-    console.log(`✅ Consentimiento guardado: ${folio} - ${nombreCompleto}`);
-    
     res.json({
       folio,
-      mensaje: 'Consentimiento guardado exitosamente',
+      mensaje: 'Admisión guardada exitosamente',
       pdf_url: `/consentimientos/${folio}.pdf`
     });
 
   } catch (err) {
-    console.error('❌ Error guardando consentimiento:', err);
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('❌ Error guardando admisión:', err);
     res.status(500).json({
       mensaje: 'Error interno del servidor',
       error: err.message
     });
   } finally {
+    client.release();
     await pool.end();
   }
 });
+
+// ============================================
+// GENERACIÓN DEL PDF COMBINADO DE ADMISIÓN
+// (una página por documento, con el texto oficial + firmas)
+// ============================================
+function generarPDFAdmision({ pdfPath, folio, fechaActual, paciente, representante, medico, anestesiologo, enfermero, documentos }) {
+  return new Promise((resolve, reject) => {
+    const DOCS = DOCUMENTOS_ADMISION.DOCUMENTOS;
+    const ROLES = DOCUMENTOS_ADMISION.ROLES;
+    const verde = '#00B2C2';
+    const gris = '#555555';
+    const negro = '#222222';
+
+    const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true, autoFirstPage: false });
+    const stream = fs.createWriteStream(pdfPath);
+    doc.pipe(stream);
+    stream.on('finish', resolve);
+    stream.on('error', reject);
+
+    const logoPath = path.join(__dirname, 'public', 'images', 'stemwell_header.png');
+    const medicoNombreTexto = (medico && medico.nombre) || '';
+
+    function sustituir(texto) {
+      return String(texto).replace(/\{\{medico\}\}/g, medicoNombreTexto || '____________________');
+    }
+
+    function encabezado() {
+      if (fs.existsSync(logoPath)) {
+        doc.image(logoPath, 0, 0, { width: doc.page.width });
+      }
+      doc.y = 110;
+    }
+
+    function piePagina() {
+      const pieY = doc.page.height - 50;
+      doc.moveTo(50, pieY - 10).lineTo(doc.page.width - 50, pieY - 10).strokeColor(verde).stroke();
+      doc.fontSize(8).fillColor(gris)
+        .text('STEMWELL · NIT 900.439.194-0 · Carrera 13 No. 118-08 · Bogotá D.C.', 50, pieY, { align: 'center' })
+        .text('info@stemwell.co · +57 310 406 8755', 50, pieY + 10, { align: 'center' })
+        .text(`Documento generado el ${fechaActual} · Folio: ${folio}`, 50, pieY + 20, { align: 'center' });
+    }
+
+    const firmantesInfo = {
+      paciente: { nombre: `${paciente.nombres} ${paciente.apellidos}`, doc: `${paciente.tipo_doc} ${paciente.cedula}` },
+      representante: representante ? { nombre: representante.nombre, doc: representante.documento } : null,
+      medico: medico ? { nombre: medico.nombre, doc: medico.documento } : null,
+      anestesiologo: anestesiologo ? { nombre: anestesiologo.nombre, doc: anestesiologo.documento } : null,
+      enfermero: enfermero ? { nombre: enfermero.nombre, doc: enfermero.documento } : null,
+    };
+
+    documentos.forEach((d) => {
+      const def = DOCS[d.key];
+      doc.addPage();
+      encabezado();
+
+      doc.fontSize(15).font('Helvetica-Bold').fillColor(verde)
+         .text(((def && def.titulo) || d.titulo || '').toUpperCase(), { align: 'center' });
+      if (def && def.codigo) {
+        doc.fontSize(9).font('Helvetica').fillColor(gris).text(def.codigo, { align: 'center' });
+      }
+      doc.moveDown(1);
+
+      doc.fontSize(9).font('Helvetica').fillColor(negro)
+         .text(`Paciente: ${paciente.nombres} ${paciente.apellidos}   |   Documento: ${paciente.tipo_doc} ${paciente.cedula}   |   Fecha: ${fechaActual}`);
+      doc.moveDown(0.8);
+
+      ((def && def.cuerpo) || []).forEach((item, idx) => {
+        if (item.tipo === 'h') {
+          doc.fontSize(10.5).font('Helvetica-Bold').fillColor(verde).text(sustituir(item.texto));
+          doc.moveDown(0.3);
+        } else if (item.tipo === 'p') {
+          doc.fontSize(9.5).font('Helvetica').fillColor(negro).text(sustituir(item.texto), { align: 'justify', lineGap: 2 });
+          doc.moveDown(0.4);
+        } else if (item.tipo === 'lista') {
+          item.items.forEach((t) => {
+            doc.fontSize(9.5).font('Helvetica').fillColor(negro).text('•  ' + sustituir(t), { lineGap: 2 });
+          });
+          doc.moveDown(0.4);
+        } else if (item.tipo === 'checklist') {
+          doc.fontSize(10).font('Helvetica-Bold').fillColor(verde).text(item.titulo + (item.codigo ? ` (${item.codigo})` : ''));
+          doc.moveDown(0.2);
+          item.grupos.forEach((grupo, gIdx) => {
+            doc.fontSize(9).font('Helvetica-Bold').fillColor(negro).text(grupo.titulo);
+            grupo.items.forEach((texto, iIdx) => {
+              const itemId = 'chk_' + idx + '_' + gIdx + '_' + iIdx;
+              const val = d.checklist && d.checklist[itemId];
+              const valTexto = val === 'si' ? 'Sí' : val === 'no' ? 'No' : '—';
+              doc.fontSize(9).font('Helvetica').fillColor(negro).text(`${texto}: ${valTexto}`);
+            });
+          });
+          doc.moveDown(0.4);
+        } else if (item.tipo === 'seleccion') {
+          const val = (d.seleccion && d.seleccion[item.clave]) || '—';
+          doc.fontSize(9.5).font('Helvetica-Bold').fillColor(negro).text(`${item.etiqueta}: ${val}`);
+          doc.moveDown(0.4);
+        }
+      });
+
+      doc.moveDown(0.5);
+      doc.moveTo(50, doc.y).lineTo(doc.page.width - 50, doc.y).strokeColor(verde).stroke();
+      doc.moveDown(1);
+
+      ((def && def.firmantes) || []).forEach((rol) => {
+        const info = firmantesInfo[rol];
+        if (!info) return;
+        if (doc.y > doc.page.height - 180) {
+          doc.addPage();
+          encabezado();
+        }
+        doc.fontSize(9.5).font('Helvetica-Bold').fillColor(verde)
+           .text(`${ROLES[rol].etiqueta}: ${info.nombre}  ·  Doc. ${info.doc || ''}`);
+        doc.moveDown(0.3);
+
+        const firmaImg = d.firmas && d.firmas[rol];
+        if (firmaImg && firmaImg.startsWith('data:image')) {
+          try {
+            const base64Data = firmaImg.replace(/^data:image\/\w+;base64,/, '');
+            const imgBuffer = Buffer.from(base64Data, 'base64');
+            doc.image(imgBuffer, { width: 160, height: 65 });
+          } catch (e) {
+            // firma inválida: se omite la imagen pero se conserva el registro en BD
+          }
+        }
+        doc.moveDown(1);
+      });
+
+      piePagina();
+    });
+
+    doc.end();
+  });
+}
 
 // ============================================
 // WEBHOOK WHATSAPP
