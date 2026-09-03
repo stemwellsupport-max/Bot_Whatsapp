@@ -167,6 +167,64 @@ async function initDB() {
       );
     `);
 
+    // ­ƒôØ PLANILLA DE REGISTRO DE VISITANTES (SGSST-F02)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS registro_visitantes (
+        id                   SERIAL PRIMARY KEY,
+        fecha                DATE NOT NULL,
+        nombre               VARCHAR(200) NOT NULL,
+        documento            VARCHAR(50)  NOT NULL,
+        rh                   VARCHAR(5)   DEFAULT '',
+        motivo_visita        VARCHAR(255) NOT NULL,
+        eps                  VARCHAR(150) DEFAULT '',
+        contacto_emergencia  VARCHAR(200) NOT NULL,
+        telefono             VARCHAR(30)  NOT NULL,
+        hora_ingreso         VARCHAR(10)  DEFAULT '',
+        hora_salida          VARCHAR(10)  DEFAULT '',
+        firma_img            TEXT,
+        idioma               VARCHAR(5)   DEFAULT 'es',
+        user_agent           TEXT DEFAULT '',
+        creado_en            TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // 🚶 FORMATO DE REGISTRO PARA PACIENTES NUEVOS (llegan caminando, sin cita
+    // previa / sin existir todavía en el CRM). Se enlaza al lead que se crea
+    // en la base compartida del CRM (leads.id) vía apiCrearLead.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS registro_pacientes_nuevos (
+        id           SERIAL PRIMARY KEY,
+        nombre       VARCHAR(200) NOT NULL,
+        telefono     VARCHAR(30)  NOT NULL,
+        correo       VARCHAR(255) DEFAULT '',
+        informacion  TEXT DEFAULT '',
+        firma_img    TEXT,
+        lead_id      INTEGER,
+        idioma       VARCHAR(5) DEFAULT 'es',
+        user_agent   TEXT DEFAULT '',
+        creado_en    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // 🧰 PLANILLA DE INGRESO DE EQUIPOS (GAD-FR-009) — equipos médicos que
+    // traen terceros a las instalaciones.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS registro_equipos (
+        id                SERIAL PRIMARY KEY,
+        fecha             DATE NOT NULL,
+        nombre            VARCHAR(200) NOT NULL,
+        cedula            VARCHAR(50)  NOT NULL,
+        contacto          VARCHAR(30)  NOT NULL,
+        registro_equipos  TEXT NOT NULL,
+        hora_ingreso      VARCHAR(10)  DEFAULT '',
+        hora_salida       VARCHAR(10)  DEFAULT '',
+        firma_img         TEXT,
+        idioma            VARCHAR(5) DEFAULT 'es',
+        user_agent        TEXT DEFAULT '',
+        creado_en         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
     console.log('Ô£à Tablas PostgreSQL verificadas/creadas');
   } finally {
     client.release();

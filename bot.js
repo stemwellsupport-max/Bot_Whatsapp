@@ -15,7 +15,7 @@ function L(valor, lang) {
 }
 const { enviarCorreoAdmision, enviarCorreoEncuesta } = require('./services/email');
 const { initDB } = require('./services/postgres');
-const { initDB: initAgendaDB } = require('./services/agenda');
+const { initDB: initAgendaDB, apiCrearLead } = require('./services/agenda');
 const adminRouter = require('./admin/router');
 const {
   initHumanControl, processOutbox, claimResumedMessages,
@@ -379,6 +379,221 @@ app.post('/consentimiento/encuesta/guardar', async (req, res) => {
 
   } catch (err) {
     console.error('❌ Error guardando encuesta:', err);
+    res.status(500).json({ mensaje: 'Error interno del servidor', error: err.message });
+  } finally {
+    await pool.end();
+  }
+});
+
+// ============================================
+// RUTA: GUARDAR REGISTRO DE VISITANTE (Planilla SGSST-F02)
+// ============================================
+app.post('/consentimiento/registro/guardar', async (req, res) => {
+  const pool = new Pool({
+    host: process.env.PG_HOST || 'localhost',
+    port: parseInt(process.env.PG_PORT || '5432'),
+    database: process.env.PG_DATABASE || 'stemwell',
+    user: process.env.PG_USER || 'crm_user',
+    password: process.env.PG_PASSWORD || 'crm2024',
+  });
+
+  try {
+    const {
+      idioma, fecha, nombre, documento, rh, motivo_visita, eps,
+      contacto_emergencia, telefono, hora_ingreso, hora_salida, firma_img, user_agent
+    } = req.body;
+
+    if (!fecha || !nombre || !documento || !motivo_visita || !contacto_emergencia || !telefono || !firma_img) {
+      return res.status(400).json({ mensaje: 'Faltan campos obligatorios.' });
+    }
+
+    await pool.query(
+      `INSERT INTO registro_visitantes
+        (fecha, nombre, documento, rh, motivo_visita, eps, contacto_emergencia, telefono,
+         hora_ingreso, hora_salida, firma_img, idioma, user_agent)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+      [
+        fecha, nombre.trim(), documento.trim(), rh || '', motivo_visita.trim(), (eps || '').trim(),
+        contacto_emergencia.trim(), telefono.trim(), hora_ingreso || '', hora_salida || '',
+        firma_img, idioma === 'en' ? 'en' : 'es', user_agent || ''
+      ]
+    );
+
+    console.log(`✅ Registro de visitante guardado: ${nombre} (${documento})`);
+    res.json({ mensaje: 'Registro guardado exitosamente' });
+
+  } catch (err) {
+    console.error('❌ Error guardando registro de visitante:', err);
+    res.status(500).json({ mensaje: 'Error interno del servidor', error: err.message });
+  } finally {
+    await pool.end();
+  }
+});
+
+// ============================================
+// RUTA: LISTA DE VISITANTES DE HOY PENDIENTES DE MARCAR SALIDA
+// ============================================
+app.get('/consentimiento/registro/pendientes/lista', async (req, res) => {
+  const pool = new Pool({
+    host: process.env.PG_HOST || 'localhost',
+    port: parseInt(process.env.PG_PORT || '5432'),
+    database: process.env.PG_DATABASE || 'stemwell',
+    user: process.env.PG_USER || 'crm_user',
+    password: process.env.PG_PASSWORD || 'crm2024',
+  });
+
+  try {
+    const r = await pool.query(
+      `SELECT id, nombre, documento, motivo_visita, hora_ingreso
+       FROM registro_visitantes
+       WHERE fecha = CURRENT_DATE AND (hora_salida IS NULL OR hora_salida = '')
+       ORDER BY hora_ingreso ASC`
+    );
+    res.json({ pendientes: r.rows });
+  } catch (err) {
+    console.error('❌ Error obteniendo pendientes de salida:', err);
+    res.status(500).json({ mensaje: 'Error interno del servidor' });
+  } finally {
+    await pool.end();
+  }
+});
+
+// ============================================
+// RUTA: MARCAR LA HORA DE SALIDA DE UN VISITANTE
+// ============================================
+app.post('/consentimiento/registro/pendientes/:id/salida', async (req, res) => {
+  const pool = new Pool({
+    host: process.env.PG_HOST || 'localhost',
+    port: parseInt(process.env.PG_PORT || '5432'),
+    database: process.env.PG_DATABASE || 'stemwell',
+    user: process.env.PG_USER || 'crm_user',
+    password: process.env.PG_PASSWORD || 'crm2024',
+  });
+
+  try {
+    const id = parseInt(req.params.id, 10);
+    const { hora_salida } = req.body;
+    if (!id || !hora_salida) {
+      return res.status(400).json({ mensaje: 'Faltan datos.' });
+    }
+
+    const r = await pool.query(
+      `UPDATE registro_visitantes SET hora_salida = $1
+       WHERE id = $2 AND (hora_salida IS NULL OR hora_salida = '')
+       RETURNING id`,
+      [hora_salida, id]
+    );
+
+    if (!r.rows.length) {
+      return res.status(404).json({ mensaje: 'No encontrado o ya tenía una salida registrada.' });
+    }
+
+    console.log(`✅ Salida registrada: visitante #${id} a las ${hora_salida}`);
+    res.json({ mensaje: 'Hora de salida registrada' });
+  } catch (err) {
+    console.error('❌ Error registrando salida:', err);
+    res.status(500).json({ mensaje: 'Error interno del servidor', error: err.message });
+  } finally {
+    await pool.end();
+  }
+});
+
+// ============================================
+// RUTA: FORMATO DE REGISTRO PARA PACIENTES NUEVOS (llegan caminando, sin
+// estar todavía en el CRM) — al guardar, además crea/actualiza el lead en
+// la base compartida del CRM (misma BD `stemwell`), canal 'Walk-in'.
+// ============================================
+app.post('/consentimiento/paciente-nuevo/guardar', async (req, res) => {
+  const pool = new Pool({
+    host: process.env.PG_HOST || 'localhost',
+    port: parseInt(process.env.PG_PORT || '5432'),
+    database: process.env.PG_DATABASE || 'stemwell',
+    user: process.env.PG_USER || 'crm_user',
+    password: process.env.PG_PASSWORD || 'crm2024',
+  });
+
+  try {
+    const { idioma, nombre, telefono, correo, informacion, firma_img, user_agent } = req.body;
+
+    if (!nombre || !telefono || !firma_img) {
+      return res.status(400).json({ mensaje: 'Faltan campos obligatorios.' });
+    }
+
+    let leadId = null;
+    try {
+      leadId = await apiCrearLead({
+        nombre: nombre.trim(),
+        telefono: telefono.trim(),
+        email: (correo || '').trim(),
+        canal: 'Walk-in',
+        notas: (informacion || '').trim(),
+      });
+    } catch (leadErr) {
+      // No bloquear el registro si falla la creación del lead en el CRM —
+      // el formato en sí queda guardado igual y se puede vincular a mano.
+      console.error('⚠️ No se pudo crear/actualizar el lead en el CRM:', leadErr.message);
+    }
+
+    await pool.query(
+      `INSERT INTO registro_pacientes_nuevos
+        (nombre, telefono, correo, informacion, firma_img, lead_id, idioma, user_agent)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [
+        nombre.trim(), telefono.trim(), (correo || '').trim(), (informacion || '').trim(),
+        firma_img, leadId, idioma === 'en' ? 'en' : 'es', user_agent || ''
+      ]
+    );
+
+    console.log(`✅ Registro de paciente nuevo guardado: ${nombre} (lead #${leadId || 'sin CRM'})`);
+    res.json({ mensaje: 'Registro guardado exitosamente', lead_id: leadId });
+
+  } catch (err) {
+    console.error('❌ Error guardando registro de paciente nuevo:', err);
+    res.status(500).json({ mensaje: 'Error interno del servidor', error: err.message });
+  } finally {
+    await pool.end();
+  }
+});
+
+// ============================================
+// RUTA: PLANILLA DE INGRESO DE EQUIPOS (GAD-FR-009)
+// ============================================
+app.post('/consentimiento/equipos/guardar', async (req, res) => {
+  const pool = new Pool({
+    host: process.env.PG_HOST || 'localhost',
+    port: parseInt(process.env.PG_PORT || '5432'),
+    database: process.env.PG_DATABASE || 'stemwell',
+    user: process.env.PG_USER || 'crm_user',
+    password: process.env.PG_PASSWORD || 'crm2024',
+  });
+
+  try {
+    const {
+      idioma, fecha, nombre, cedula, contacto, registro_equipos,
+      hora_ingreso, hora_salida, firma_img, user_agent
+    } = req.body;
+
+    if (!fecha || !nombre || !cedula || !contacto || !registro_equipos || !firma_img) {
+      return res.status(400).json({ mensaje: 'Faltan campos obligatorios.' });
+    }
+
+    await pool.query(
+      `INSERT INTO registro_equipos
+        (fecha, nombre, cedula, contacto, registro_equipos, hora_ingreso, hora_salida,
+         firma_img, idioma, user_agent)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [
+        fecha, nombre.trim(), cedula.trim(), contacto.trim(), registro_equipos.trim(),
+        hora_ingreso || '', hora_salida || '', firma_img,
+        idioma === 'en' ? 'en' : 'es', user_agent || ''
+      ]
+    );
+
+    console.log(`✅ Registro de ingreso de equipos guardado: ${nombre} (${cedula})`);
+    res.json({ mensaje: 'Registro guardado exitosamente' });
+
+  } catch (err) {
+    console.error('❌ Error guardando registro de equipos:', err);
     res.status(500).json({ mensaje: 'Error interno del servidor', error: err.message });
   } finally {
     await pool.end();

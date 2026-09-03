@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title id="page-title">Pendientes de salida · Stemwell</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --verde: #00B2C2; --verde-claro: #E6F7F9; --texto: #1C2B26; --gris: #6B7B76;
+    --borde: #D4E6DF; --fondo: #F7FAF8; --blanco: #FFFFFF; --error: #C0392B; --max-w: 640px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Poppins', sans-serif; background: var(--fondo); color: var(--texto); min-height: 100vh; }
+  .header { background: var(--blanco); border-bottom: 1px solid var(--borde); padding: 10px 24px; display: flex; align-items: center; position: sticky; top: 0; z-index: 10; }
+  .header img { height: 54px; width: auto; }
+  .container { max-width: var(--max-w); margin: 0 auto; padding: 20px 20px 40px; }
+  @media (min-width: 700px) { :root { --max-w: 760px; } }
+  @media (min-width: 1000px) { :root { --max-w: 920px; } }
+  .titulo-simple { margin-bottom: clamp(14px, 1.8vh, 22px); display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+  .titulo-simple h2 { font-size: clamp(20px, 2.6vw, 28px); font-weight: 800; color: var(--verde); margin-bottom: 6px; }
+  .titulo-simple p { font-size: clamp(13px, 1vw, 15px); color: var(--gris); line-height: 1.4; }
+  .btn-secundario {
+    padding: 12px 18px; background: none; color: var(--gris); border: 1.5px solid var(--borde); border-radius: 14px;
+    font-family: 'Poppins', sans-serif; font-size: 13.5px; font-weight: 500; cursor: pointer; transition: all .2s; white-space: nowrap;
+  }
+  .btn-secundario:hover { border-color: var(--verde); color: var(--verde); }
+
+  #lista-pendientes { display: flex; flex-direction: column; gap: 12px; }
+  .tarjeta-visitante {
+    background: var(--blanco); border: 1px solid var(--borde); border-radius: 16px;
+    padding: 16px 18px; display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+  }
+  .tarjeta-info { min-width: 0; }
+  .tarjeta-nombre { font-size: 15px; font-weight: 600; color: var(--texto); }
+  .tarjeta-detalle { font-size: 12.5px; color: var(--gris); margin-top: 3px; line-height: 1.5; }
+  .tarjeta-hora { font-size: 12px; color: var(--verde); font-weight: 600; background: var(--verde-claro); border-radius: 999px; padding: 3px 10px; display: inline-block; margin-top: 6px; }
+
+  .btn-salida {
+    padding: 12px 20px; background: var(--verde); color: white; border: none; border-radius: 12px;
+    font-family: 'Poppins', sans-serif; font-size: 13.5px; font-weight: 600; cursor: pointer; transition: all .2s; white-space: nowrap;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .btn-salida:hover:not(:disabled) { background: #0093a0; }
+  .btn-salida:disabled { opacity: .6; cursor: not-allowed; }
+  .spinner-mini { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.4); border-top-color: white; border-radius: 50%; animation: spin .7s linear infinite; display: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #estado-vacio, #estado-cargando { text-align: center; padding: 60px 20px; color: var(--gris); font-size: 14px; }
+  #estado-vacio svg { opacity: .35; margin-bottom: 14px; }
+</style>
+</head>
+<body>
+
+<header class="header"><img src="/images/STEMWELL_LOGO_.png" alt="Stemwell" /></header>
+
+<div class="container">
+  <div class="titulo-simple">
+    <div>
+      <h2 id="txt-titulo">&nbsp;</h2>
+      <p id="txt-intro"></p>
+    </div>
+    <button class="btn-secundario" id="btn-inicio" type="button"></button>
+  </div>
+
+  <div id="estado-cargando"></div>
+  <div id="estado-vacio" style="display:none;">
+    <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+    <p id="txt-vacio"></p>
+  </div>
+  <div id="lista-pendientes"></div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var TEXTOS = {
+    es: {
+      tituloPagina: 'Pendientes de salida · Stemwell',
+      titulo: 'Pendientes de salida',
+      intro: 'Visitantes que ingresaron hoy y aún no han marcado su salida.',
+      inicio: '← Inicio',
+      cargando: 'Cargando…',
+      vacio: 'No hay visitantes pendientes de salida.',
+      documento: 'Doc.', motivo: 'Motivo', ingreso: 'Ingresó',
+      marcarSalida: 'Marcar salida ahora',
+      marcando: 'Guardando…',
+      errorCargar: 'No se pudo cargar la lista. Verifica la conexión.',
+      errorMarcar: 'Hubo un problema al registrar la salida.'
+    },
+    en: {
+      tituloPagina: 'Pending Check-outs · Stemwell',
+      titulo: 'Pending Check-outs',
+      intro: 'Visitors who checked in today and have not checked out yet.',
+      inicio: '← Home',
+      cargando: 'Loading…',
+      vacio: 'No visitors pending check-out.',
+      documento: 'ID', motivo: 'Reason', ingreso: 'Checked in',
+      marcarSalida: 'Mark check-out now',
+      marcando: 'Saving…',
+      errorCargar: 'Could not load the list. Check your connection.',
+      errorMarcar: 'There was a problem recording the check-out.'
+    }
+  };
+
+  var params = new URLSearchParams(window.location.search);
+  var lang = params.get('lang') === 'en' ? 'en' : 'es';
+  var t = TEXTOS[lang];
+  document.documentElement.lang = lang;
+
+  document.getElementById('page-title').textContent = t.tituloPagina;
+  document.getElementById('txt-titulo').textContent = t.titulo;
+  document.getElementById('txt-intro').textContent = t.intro;
+  document.getElementById('btn-inicio').textContent = t.inicio;
+  document.getElementById('estado-cargando').textContent = t.cargando;
+  document.getElementById('txt-vacio').textContent = t.vacio;
+
+  document.getElementById('btn-inicio').addEventListener('click', function () {
+    window.location.href = '/consentimiento/?lang=' + lang;
+  });
+
+  function horaAhora() {
+    var d = new Date();
+    return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+
+  function pintarTarjeta(v) {
+    var el = document.createElement('div');
+    el.className = 'tarjeta-visitante';
+    el.innerHTML =
+      '<div class="tarjeta-info">' +
+        '<div class="tarjeta-nombre">' + escapeHtml(v.nombre) + '</div>' +
+        '<div class="tarjeta-detalle">' + t.documento + ': ' + escapeHtml(v.documento) + ' · ' + t.motivo + ': ' + escapeHtml(v.motivo_visita) + '</div>' +
+        '<span class="tarjeta-hora">' + t.ingreso + ' ' + escapeHtml(v.hora_ingreso || '—') + '</span>' +
+      '</div>' +
+      '<button class="btn-salida" type="button">' +
+        '<span class="txt-btn-salida">' + t.marcarSalida + '</span>' +
+        '<div class="spinner-mini"></div>' +
+      '</button>';
+
+    var btn = el.querySelector('.btn-salida');
+    btn.addEventListener('click', function () {
+      var txt = el.querySelector('.txt-btn-salida');
+      var spinner = el.querySelector('.spinner-mini');
+      btn.disabled = true;
+      txt.textContent = t.marcando;
+      spinner.style.display = 'block';
+
+      fetch('/consentimiento/registro/pendientes/' + v.id + '/salida', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hora_salida: horaAhora() })
+      }).then(function (res) {
+        return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+      }).then(function (r) {
+        if (!r.ok) throw new Error(r.data.mensaje || 'Error del servidor');
+        el.remove();
+        if (!document.querySelector('.tarjeta-visitante')) mostrarVacio();
+      }).catch(function (err) {
+        console.error(err);
+        alert(t.errorMarcar + '\n\n' + err.message);
+        btn.disabled = false;
+        txt.textContent = t.marcarSalida;
+        spinner.style.display = 'none';
+      });
+    });
+
+    return el;
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function mostrarVacio() {
+    document.getElementById('estado-vacio').style.display = 'block';
+  }
+
+  fetch('/consentimiento/registro/pendientes/lista')
+    .then(function (res) { return res.json(); })
+    .then(function (data) {
+      document.getElementById('estado-cargando').style.display = 'none';
+      var pendientes = data.pendientes || [];
+      if (!pendientes.length) { mostrarVacio(); return; }
+      var contenedor = document.getElementById('lista-pendientes');
+      pendientes.forEach(function (v) { contenedor.appendChild(pintarTarjeta(v)); });
+    })
+    .catch(function (err) {
+      console.error(err);
+      document.getElementById('estado-cargando').textContent = t.errorCargar;
+    });
+})();
+</script>
+</body>
+</html>

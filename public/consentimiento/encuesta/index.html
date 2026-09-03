@@ -20,6 +20,8 @@
   @media (min-width: 700px) { :root { --max-w: 680px; } }
   @media (min-width: 1000px) { :root { --max-w: 900px; } }
   @media (min-width: 1300px) { :root { --max-w: 1100px; } }
+  @media (min-width: 1600px) { :root { --max-w: 1350px; } }
+  @media (min-width: 1850px) { :root { --max-w: 1650px; } }
   .titulo-simple { margin-bottom: clamp(12px, 1.4vh, 18px); }
   .titulo-simple h2 { font-size: clamp(20px, 2.6vw, 28px); font-weight: 800; color: var(--verde); margin-bottom: 6px; }
   .titulo-simple p { font-size: clamp(13px, 1vw, 15px); color: var(--gris); line-height: 1.4; }
@@ -113,6 +115,19 @@
   .exito-qr-bloque { display: flex; flex-direction: column; align-items: center; gap: 8px; }
   .exito-qr-bloque img { width: 340px; height: 340px; border-radius: 16px; border: 1.5px solid var(--borde); padding: 12px; background: var(--blanco); }
   .exito-qr-bloque span { font-size: 13px; color: var(--gris); max-width: 300px; line-height: 1.4; }
+
+  /* ── EFECTO "RIPPLE" AL TOCAR (feedback moderno) ── */
+  .ripple-host { position: relative; }
+  .ripple-host:not(.icono-esquina) { overflow: hidden; }
+  .ripple-host:active { transform: scale(.97); }
+  .ripple-wave {
+    position: absolute; border-radius: 50%; transform: scale(0); opacity: .55;
+    background: currentColor; mix-blend-mode: overlay; pointer-events: none;
+    animation: ripple-expandir .6s ease-out forwards;
+  }
+  .ripple-host.ripple-clara .ripple-wave { background: var(--verde); mix-blend-mode: normal; opacity: .18; }
+  @keyframes ripple-expandir { to { transform: scale(1); opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .ripple-wave { display: none; } }
 </style>
 </head>
 <body>
@@ -518,6 +533,25 @@
       spinner.style.display = 'none';
     });
   });
+
+  // ── EFECTO "RIPPLE" GLOBAL AL TOCAR ──────────────────────────────────────
+  var RIPPLE_SELECTOR = '.btn-enviar, .btn-secundario, .btn-limpiar, .opcion-wrap, .pill-opcion, .check-wrap';
+  var RIPPLE_CLARAS = ['btn-secundario', 'btn-limpiar', 'opcion-wrap', 'check-wrap'];
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest(RIPPLE_SELECTOR);
+    if (!el) return;
+    el.classList.add('ripple-host');
+    el.classList.toggle('ripple-clara', RIPPLE_CLARAS.some(function (c) { return el.classList.contains(c); }));
+    var rect = el.getBoundingClientRect();
+    var size = Math.max(rect.width, rect.height) * 1.6;
+    var onda = document.createElement('span');
+    onda.className = 'ripple-wave';
+    onda.style.width = onda.style.height = size + 'px';
+    onda.style.left = (e.clientX - rect.left - size / 2) + 'px';
+    onda.style.top = (e.clientY - rect.top - size / 2) + 'px';
+    el.appendChild(onda);
+    setTimeout(function () { onda.remove(); }, 650);
+  }, true);
 })();
 </script>
 </body>
