@@ -138,7 +138,80 @@ async function enviarCorreoEncuesta({
   return destinatarios;
 }
 
+// ============================================================
+// Envío de notificación cuando recepción completa el formato de
+// "Admisión de Sala de Cirugías" (mismo formato que la Hoja de
+// Admisión / SIAU-FR-007 del CRM). Es un formulario administrativo
+// que llena el personal, así que va solo a recepción + soporte —
+// no al paciente, y no lleva PDF adjunto.
+// ============================================================
+function construirDestinatariosAdmisionCirugias() {
+  const destinatarios = new Set();
+  RECEPCION.forEach((e) => destinatarios.add(e));
+  destinatarios.add(SOPORTE);
+  return Array.from(destinatarios);
+}
+
+async function enviarCorreoAdmisionCirugias(datos) {
+  const destinatarios = construirDestinatariosAdmisionCirugias();
+
+  const fila = (label, value) => value
+    ? `<tr><td style="padding:3px 10px 3px 0; color:#6B7B76;"><strong>${label}</strong></td><td style="padding:3px 0;">${value}</td></tr>`
+    : '';
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; color:#1C2B26; font-size:14px; line-height:1.5;">
+      <p>Hola,</p>
+      <p>Recepción completó el formato de <strong>Admisión de Sala de Cirugías</strong> en la tablet.</p>
+      <table cellpadding="0" cellspacing="0" style="margin:12px 0;">
+        ${fila('Nombres y Apellidos', datos.nombres_apellidos)}
+        ${fila('Identificación', datos.identificacion)}
+        ${fila('Sexo', datos.sexo)}
+        ${fila('Edad', datos.edad)}
+        ${fila('Fecha de Nacimiento', datos.fecha_nacimiento)}
+        ${fila('RH', datos.rh)}
+        ${fila('Teléfono', datos.telefono)}
+        ${fila('Correo', datos.correo)}
+        ${fila('Estado Civil', datos.estado_civil)}
+        ${fila('Dirección', datos.direccion)}
+        ${fila('Lugar de Residencia', datos.lugar_residencia)}
+        ${fila('Ocupación', datos.ocupacion)}
+        ${fila('Procedimiento', datos.procedimiento)}
+        ${fila('Doctor(a)', datos.doctora)}
+        ${fila('HGM', datos.hgm)}
+        ${fila('Peso (kg)', datos.peso)}
+        ${fila('Estatura (m)', datos.estatura)}
+      </table>
+      <table cellpadding="0" cellspacing="0" style="margin:12px 0;">
+        ${fila('Responsable', datos.responsable)}
+        ${fila('Parentesco', datos.parentesco)}
+        ${fila('Celular Responsable', datos.celular_responsable)}
+        ${fila('Entidad', datos.entidad)}
+        ${fila('No. Afiliación', datos.numero_afiliacion)}
+        ${fila('Particular', datos.particular)}
+        ${fila('Fecha de Ingreso', datos.fecha_ingreso)}
+        ${fila('Tipo de Afiliación', datos.tipo_afiliacion)}
+        ${fila('Servicio', datos.servicio)}
+        ${fila('EPS', datos.eps)}
+        ${fila('Prepagada', datos.prepagada)}
+        ${fila('Servicio Complementario', datos.servicio_complementario)}
+      </table>
+      <p style="color:#6B7B76; font-size:12px;">STEMWELL · NIT 900.439.194-0 · Carrera 13 No. 118-08 · Bogotá D.C.</p>
+    </div>
+  `;
+
+  await getTransporter().sendMail({
+    from: `"${process.env.SMTP_FROM_NAME || 'Stemwell'}" <${process.env.SMTP_USER}>`,
+    to: destinatarios,
+    subject: `Admisión de Sala de Cirugías — ${datos.nombres_apellidos}`,
+    html,
+  });
+
+  return destinatarios;
+}
+
 module.exports = {
   enviarCorreoAdmision, construirDestinatarios, enviarCorreoEncuesta, construirDestinatariosEncuesta, getTransporter,
+  enviarCorreoAdmisionCirugias, construirDestinatariosAdmisionCirugias,
   PROCEDIMIENTOS_ENCUESTA, ESCALA4, ESCALA5, ESCALA_RECOMENDACION,
 };

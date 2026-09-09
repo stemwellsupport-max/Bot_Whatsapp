@@ -13,7 +13,7 @@ function L(valor, lang) {
   if (valor && typeof valor === 'object') return valor[lang] || valor.es || '';
   return valor || '';
 }
-const { enviarCorreoAdmision, enviarCorreoEncuesta } = require('./services/email');
+const { enviarCorreoAdmision, enviarCorreoEncuesta, enviarCorreoAdmisionCirugias } = require('./services/email');
 const { initDB } = require('./services/postgres');
 const { initDB: initAgendaDB, apiCrearLead } = require('./services/agenda');
 const adminRouter = require('./admin/router');
@@ -431,6 +431,41 @@ app.post('/consentimiento/registro/guardar', async (req, res) => {
 });
 
 // ============================================
+// RUTA: VISITANTES YA REGISTRADOS ANTES (para autocompletar la 2da+ visita
+// y evitar que vuelvan a escribir mal sus datos — un documento por persona,
+// con los datos de su registro más reciente)
+// ============================================
+app.get('/consentimiento/registro/visitantes-previos', async (req, res) => {
+  const pool = new Pool({
+    host: process.env.PG_HOST || 'localhost',
+    port: parseInt(process.env.PG_PORT || '5432'),
+    database: process.env.PG_DATABASE || 'stemwell',
+    user: process.env.PG_USER || 'crm_user',
+    password: process.env.PG_PASSWORD || 'crm2024',
+  });
+
+  try {
+    // Descarta documentos placeholder obvios (todo ceros/nueves, muy cortos)
+    // para no perpetuar la basura que motivó esta función en primer lugar.
+    const r = await pool.query(
+      `SELECT DISTINCT ON (documento) documento, nombre, rh, eps, contacto_emergencia, telefono
+       FROM registro_visitantes
+       WHERE documento IS NOT NULL
+         AND length(trim(documento)) >= 6
+         AND documento !~ '^(\\d)\\1*$'
+       ORDER BY documento, creado_en DESC`
+    );
+    const visitantes = r.rows.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+    res.json({ visitantes });
+  } catch (err) {
+    console.error('❌ Error obteniendo visitantes previos:', err);
+    res.status(500).json({ mensaje: 'Error interno del servidor' });
+  } finally {
+    await pool.end();
+  }
+});
+
+// ============================================
 // RUTA: LISTA DE VISITANTES DE HOY PENDIENTES DE MARCAR SALIDA
 // ============================================
 app.get('/consentimiento/registro/pendientes/lista', async (req, res) => {
@@ -492,6 +527,78 @@ app.post('/consentimiento/registro/pendientes/:id/salida', async (req, res) => {
     res.json({ mensaje: 'Hora de salida registrada' });
   } catch (err) {
     console.error('❌ Error registrando salida:', err);
+    res.status(500).json({ mensaje: 'Error interno del servidor', error: err.message });
+  } finally {
+    await pool.end();
+  }
+});
+
+// ============================================
+// RUTA: ADMISIÓN DE SALA DE CIRUGÍAS (mismo formato que la "Hoja de
+// Admisión de Pacientes" / SIAU-FR-007 del CRM) — la llena recepción antes
+// de entregar la tablet al paciente. Deliberadamente independiente del
+// CRM: no crea ni actualiza nada allá, solo queda su propio registro aquí.
+// ============================================
+app.post('/consentimiento/admision-cirugias/guardar', async (req, res) => {
+  const pool = new Pool({
+    host: process.env.PG_HOST || 'localhost',
+    port: parseInt(process.env.PG_PORT || '5432'),
+    database: process.env.PG_DATABASE || 'stemwell',
+    user: process.env.PG_USER || 'crm_user',
+    password: process.env.PG_PASSWORD || 'crm2024',
+  });
+
+  try {
+    const {
+      idioma, nombres_apellidos, identificacion, sexo, edad, fecha_nacimiento, rh,
+      telefono, correo, estado_civil, direccion, lugar_residencia, ocupacion,
+      procedimiento, doctora, hgm, peso, estatura, responsable, parentesco,
+      celular_responsable, entidad, numero_afiliacion, particular, fecha_ingreso,
+      tipo_afiliacion, servicio, eps, prepagada, servicio_complementario, user_agent
+    } = req.body;
+
+    if (!nombres_apellidos) {
+      return res.status(400).json({ mensaje: 'Falta el nombre del paciente.' });
+    }
+
+    await pool.query(
+      `INSERT INTO admision_sala_cirugias
+        (nombres_apellidos, identificacion, sexo, edad, fecha_nacimiento, rh,
+         telefono, correo, estado_civil, direccion, lugar_residencia, ocupacion,
+         procedimiento, doctora, hgm, peso, estatura, responsable, parentesco,
+         celular_responsable, entidad, numero_afiliacion, particular, fecha_ingreso,
+         tipo_afiliacion, servicio, eps, prepagada, servicio_complementario,
+         idioma, user_agent)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,
+               $20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31)`,
+      [
+        nombres_apellidos.trim(), identificacion || '', sexo || '', edad || '',
+        fecha_nacimiento || '', rh || '', telefono || '', correo || '',
+        estado_civil || '', direccion || '', lugar_residencia || '', ocupacion || '',
+        procedimiento || '', doctora || '', hgm || '', peso || '', estatura || '',
+        responsable || '', parentesco || '', celular_responsable || '', entidad || '',
+        numero_afiliacion || '', particular || '', fecha_ingreso || '',
+        tipo_afiliacion || '', servicio || '', eps || '', prepagada || '',
+        servicio_complementario || '', idioma === 'en' ? 'en' : 'es', user_agent || ''
+      ]
+    );
+
+    console.log(`✅ Admisión de sala de cirugías guardada: ${nombres_apellidos}`);
+
+    enviarCorreoAdmisionCirugias({
+      nombres_apellidos, identificacion, sexo, edad, fecha_nacimiento, rh,
+      telefono, correo, estado_civil, direccion, lugar_residencia, ocupacion,
+      procedimiento, doctora, hgm, peso, estatura, responsable, parentesco,
+      celular_responsable, entidad, numero_afiliacion, particular, fecha_ingreso,
+      tipo_afiliacion, servicio, eps, prepagada, servicio_complementario
+    })
+      .then((destinatarios) => console.log(`✅ Correo de admisión de sala de cirugías enviado a: ${destinatarios.join(', ')}`))
+      .catch((err) => console.error('❌ Error enviando correo de admisión de sala de cirugías:', err));
+
+    res.json({ mensaje: 'Admisión guardada exitosamente' });
+
+  } catch (err) {
+    console.error('❌ Error guardando admisión de sala de cirugías:', err);
     res.status(500).json({ mensaje: 'Error interno del servidor', error: err.message });
   } finally {
     await pool.end();

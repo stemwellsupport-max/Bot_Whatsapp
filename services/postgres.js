@@ -225,6 +225,48 @@ async function initDB() {
       );
     `);
 
+    // 🏥 ADMISIÓN DE SALA DE CIRUGÍAS (mismo formato que "Hoja de Admisión de
+    // Pacientes" / SIAU-FR-007 del CRM) — la llena recepción en la tablet
+    // antes de entregársela al paciente. Independiente del CRM a propósito
+    // (no crea/actualiza nada allá), solo queda como registro propio aquí.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS admision_sala_cirugias (
+        id                       SERIAL PRIMARY KEY,
+        nombres_apellidos        VARCHAR(200) NOT NULL,
+        identificacion           VARCHAR(50)  DEFAULT '',
+        sexo                     VARCHAR(20)  DEFAULT '',
+        edad                     VARCHAR(10)  DEFAULT '',
+        fecha_nacimiento         VARCHAR(20)  DEFAULT '',
+        rh                       VARCHAR(10)  DEFAULT '',
+        telefono                 VARCHAR(30)  DEFAULT '',
+        correo                   VARCHAR(255) DEFAULT '',
+        estado_civil             VARCHAR(50)  DEFAULT '',
+        direccion                VARCHAR(255) DEFAULT '',
+        lugar_residencia         VARCHAR(150) DEFAULT '',
+        ocupacion                VARCHAR(150) DEFAULT '',
+        procedimiento            VARCHAR(200) DEFAULT '',
+        doctora                  VARCHAR(150) DEFAULT '',
+        hgm                      VARCHAR(50)  DEFAULT '',
+        peso                     VARCHAR(20)  DEFAULT '',
+        estatura                 VARCHAR(20)  DEFAULT '',
+        responsable              VARCHAR(150) DEFAULT '',
+        parentesco               VARCHAR(100) DEFAULT '',
+        celular_responsable      VARCHAR(30)  DEFAULT '',
+        entidad                  VARCHAR(200) DEFAULT '',
+        numero_afiliacion        VARCHAR(50)  DEFAULT '',
+        particular               VARCHAR(255) DEFAULT '',
+        fecha_ingreso            VARCHAR(20)  DEFAULT '',
+        tipo_afiliacion          VARCHAR(100) DEFAULT '',
+        servicio                 VARCHAR(200) DEFAULT '',
+        eps                      VARCHAR(100) DEFAULT '',
+        prepagada                VARCHAR(100) DEFAULT '',
+        servicio_complementario  VARCHAR(200) DEFAULT '',
+        idioma                   VARCHAR(5) DEFAULT 'es',
+        user_agent               TEXT DEFAULT '',
+        creado_en                TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
     console.log('Ô£à Tablas PostgreSQL verificadas/creadas');
   } finally {
     client.release();

@@ -314,6 +314,44 @@
     .row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
     @media (max-width: 620px) { .row-3 { grid-template-columns: 1fr 1fr; } }
     @media (max-width: 420px) { .row-3 { grid-template-columns: 1fr; } }
+    .row-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; }
+    @media (max-width: 900px) { .row-4 { grid-template-columns: 1fr 1fr 1fr; } }
+    @media (max-width: 620px) { .row-4 { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 420px) { .row-4 { grid-template-columns: 1fr; } }
+
+    /* ── ADMISIÓN DE SALA DE CIRUGÍAS: son muchos campos (formato SIAU-FR-007
+       del CRM), así que se acomodan en columnas para que quepan sin scroll
+       en la tablet, en vez de una sola lista larga vertical. */
+    /* Tamaños fijos y compactos a propósito (no clamp) — esta pantalla tiene
+       muchísimos campos (formato SIAU-FR-007 del CRM) y debe caber sin
+       scroll incluso cuando el navegador real recorta el alto disponible
+       (barra de pestañas, marcadores, etc.), no solo en una tablet a
+       pantalla completa exacta de 1080px. */
+    body:has(#pantalla-admision-cirugias.activa) #header-app { padding: 4px 24px; }
+    body:has(#pantalla-admision-cirugias.activa) #header-app img { height: 34px; }
+    #pantalla-admision-cirugias .titulo-simple p { display: none; }
+    #pantalla-admision-cirugias .titulo-simple { margin-bottom: 6px; }
+    #pantalla-admision-cirugias .titulo-simple h2 { font-size: clamp(20px, 2vw, 26px); }
+    #pantalla-admision-cirugias .section { padding: 7px 14px; margin-bottom: 5px; }
+    #pantalla-admision-cirugias .section-title { margin-bottom: 4px; font-size: 11.5px; }
+    #pantalla-admision-cirugias .field { margin-bottom: 4px; }
+    #pantalla-admision-cirugias .row-3,
+    #pantalla-admision-cirugias .row-4,
+    #pantalla-admision-cirugias .row-2 { gap: 8px; }
+    #pantalla-admision-cirugias input[type="text"],
+    #pantalla-admision-cirugias input[type="tel"],
+    #pantalla-admision-cirugias input[type="email"],
+    #pantalla-admision-cirugias input[type="date"],
+    #pantalla-admision-cirugias select {
+      padding: 5px 8px;
+      font-size: 12.5px;
+    }
+    #pantalla-admision-cirugias label { font-size: 11px; margin-bottom: 2px; }
+    #pantalla-admision-cirugias .botones-nav { margin-top: 4px; }
+    @media (min-width: 1000px) {
+      .sc-fila-abajo { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; align-items: start; }
+      .sc-fila-abajo .section { margin-bottom: 0; }
+    }
 
     /* ── CUERPO DEL DOCUMENTO ── */
     .doc-scroll {
@@ -896,6 +934,176 @@
     </div>
   </div>
 
+  <!-- ══════════ PASO 0.5 — STAFF: ADMISIÓN DE SALA DE CIRUGÍAS ══════════ -->
+  <div class="pantalla" id="pantalla-admision-cirugias">
+    <div class="titulo-simple">
+      <h2 data-i18n="sc_titulo">Admisión de Sala de Cirugías</h2>
+      <p data-i18n="sc_desc">Recepción completa estos datos administrativos antes de entregar la tablet al paciente.</p>
+    </div>
+
+    <div class="lateral-contenido">
+      <div class="section">
+        <div class="section-title" data-i18n="sc_section_paciente">Datos del Paciente</div>
+        <div class="row-4">
+          <div class="field">
+            <label><span data-i18n="sc_label_nombres">Nombres y Apellidos</span> <span class="req">*</span></label>
+            <input type="text" id="sc-nombres" />
+            <div class="field-error" id="err-sc-nombres" data-i18n="sc_err_nombres">Ingresa el nombre del paciente</div>
+          </div>
+          <div class="field">
+            <label data-i18n="sc_label_identificacion">Identificación</label>
+            <input type="text" id="sc-identificacion" inputmode="numeric" />
+          </div>
+          <div class="field">
+            <label data-i18n="sc_label_sexo">Sexo</label>
+            <select id="sc-sexo">
+              <option value=""></option>
+              <option value="Femenino" data-i18n="sc_opt_femenino">Femenino</option>
+              <option value="Masculino" data-i18n="sc_opt_masculino">Masculino</option>
+              <option value="Otro" data-i18n="sc_opt_otro">Otro</option>
+            </select>
+          </div>
+          <div class="field">
+            <label data-i18n="sc_label_fecha_nacimiento">Fecha de Nacimiento</label>
+            <input type="date" id="sc-fecha-nacimiento" />
+          </div>
+          <div class="field">
+            <label data-i18n="sc_label_edad">Edad</label>
+            <input type="text" id="sc-edad" inputmode="numeric" />
+          </div>
+          <div class="field">
+            <label data-i18n="sc_label_rh">RH</label>
+            <input type="text" id="sc-rh" placeholder="O+" />
+          </div>
+          <div class="field">
+            <label data-i18n="sc_label_telefono">Teléfono</label>
+            <input type="tel" id="sc-telefono" inputmode="tel" />
+          </div>
+          <div class="field">
+            <label data-i18n="sc_label_correo">Correo</label>
+            <input type="email" id="sc-correo" />
+          </div>
+          <div class="field">
+            <label data-i18n="sc_label_estado_civil">Estado Civil</label>
+            <input type="text" id="sc-estado-civil" />
+          </div>
+          <div class="field">
+            <label data-i18n="sc_label_direccion">Dirección</label>
+            <input type="text" id="sc-direccion" />
+          </div>
+          <div class="field">
+            <label data-i18n="sc_label_lugar_residencia">Lugar de Residencia</label>
+            <input type="text" id="sc-lugar-residencia" />
+          </div>
+          <div class="field">
+            <label data-i18n="sc_label_ocupacion">Ocupación</label>
+            <input type="text" id="sc-ocupacion" />
+          </div>
+          <div class="field">
+            <label data-i18n="sc_label_procedimiento">Procedimiento</label>
+            <input type="text" id="sc-procedimiento" />
+          </div>
+          <div class="field">
+            <label data-i18n="sc_label_doctora">Doctor(a)</label>
+            <input type="text" id="sc-doctora" />
+          </div>
+          <div class="field">
+            <label data-i18n="sc_label_hgm">HGM</label>
+            <input type="text" id="sc-hgm" />
+          </div>
+          <div class="field">
+            <label data-i18n="sc_label_peso">Peso (kg)</label>
+            <input type="text" id="sc-peso" inputmode="numeric" />
+          </div>
+          <div class="field">
+            <label data-i18n="sc_label_estatura">Estatura (m)</label>
+            <input type="text" id="sc-estatura" inputmode="numeric" />
+          </div>
+        </div>
+      </div>
+
+      <div class="sc-fila-abajo">
+      <div class="section">
+        <div class="section-title" data-i18n="sc_section_responsable">Responsable de la Cuenta</div>
+        <div class="row-2">
+          <div class="field">
+            <label data-i18n="sc_label_responsable">Responsable</label>
+            <input type="text" id="sc-responsable" />
+          </div>
+          <div class="field">
+            <label data-i18n="sc_label_parentesco">Parentesco</label>
+            <input type="text" id="sc-parentesco" />
+          </div>
+        </div>
+        <div class="field">
+          <label data-i18n="sc_label_celular_responsable">Celular</label>
+          <input type="tel" id="sc-celular-responsable" inputmode="tel" />
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title" data-i18n="sc_section_entidad">Entidad Responsable de la Cuenta</div>
+        <div class="row-2">
+          <div class="field">
+            <label data-i18n="sc_label_entidad">Entidad</label>
+            <input type="text" id="sc-entidad" placeholder="Particular" />
+          </div>
+          <div class="field">
+            <label data-i18n="sc_label_numero_afiliacion">No. Afiliación</label>
+            <input type="text" id="sc-numero-afiliacion" />
+          </div>
+        </div>
+        <div class="field">
+          <label data-i18n="sc_label_particular">Particular</label>
+          <input type="text" id="sc-particular" />
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title" data-i18n="sc_section_atencion">Datos de la Atención</div>
+        <div class="row-2">
+          <div class="field">
+            <label data-i18n="sc_label_fecha_ingreso">Fecha de Ingreso</label>
+            <input type="date" id="sc-fecha-ingreso" />
+          </div>
+          <div class="field">
+            <label data-i18n="sc_label_tipo_afiliacion">Tipo de Afiliación</label>
+            <input type="text" id="sc-tipo-afiliacion" />
+          </div>
+        </div>
+        <div class="row-2">
+          <div class="field">
+            <label data-i18n="sc_label_servicio">Servicio</label>
+            <input type="text" id="sc-servicio" />
+          </div>
+          <div class="field">
+            <label data-i18n="sc_label_eps">EPS</label>
+            <input type="text" id="sc-eps" data-i18n-placeholder="sc_placeholder_eps" placeholder="Particular / Subsidiado / Contributivo" />
+          </div>
+        </div>
+        <div class="row-2">
+          <div class="field">
+            <label data-i18n="sc_label_prepagada">Prepagada</label>
+            <input type="text" id="sc-prepagada" />
+          </div>
+          <div class="field">
+            <label data-i18n="sc_label_servicio_complementario">Servicio Complementario</label>
+            <input type="text" id="sc-servicio-complementario" />
+          </div>
+        </div>
+      </div>
+      </div>
+
+      <div class="botones-nav">
+        <button class="btn-secundario" id="btn-sc-atras" type="button" data-i18n="btn_sc_atras">← Atrás</button>
+        <button class="btn-enviar" id="btn-sc-continuar" type="button">
+          <span data-i18n="btn_sc_continuar">Guardar y continuar</span>
+          <div class="spinner" id="spinner-sc"></div>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- ══════════ PASO 1 — DATOS DEL PACIENTE Y DEL EQUIPO ══════════ -->
   <div class="pantalla" id="pantalla-datos">
     <div class="titulo-simple">
@@ -1118,6 +1326,7 @@
       btn_pendientes_salida: 'Pendientes de salida',
       btn_paciente_nuevo: 'Registro de paciente nuevo (llega caminando)',
       btn_equipos: 'Ingreso de equipos médicos',
+      proc_sala_cirugias: 'Sala de Cirugías',
       badge_ley: 'Ley 1581 de 2012 · Colombia',
       staff_titulo: 'Admisión del Paciente',
       staff_desc: 'Antes de entregar la tablet al paciente, selecciona los procedimientos que se realizarán hoy. Los documentos generales (política de datos, bienvenida, descargo de responsabilidad y uso de imagen) se incluyen siempre.',
@@ -1125,6 +1334,48 @@
       staff_section_sub: 'Marca solo los que apliquen para esta visita.',
       btn_staff_atras: '← Inicio',
       btn_staff_continuar: 'Continuar con el paciente',
+      sc_titulo: 'Admisión de Sala de Cirugías',
+      sc_desc: 'Recepción completa estos datos administrativos antes de entregar la tablet al paciente.',
+      sc_section_paciente: 'Datos del Paciente',
+      sc_section_responsable: 'Responsable de la Cuenta',
+      sc_section_entidad: 'Entidad Responsable de la Cuenta',
+      sc_section_atencion: 'Datos de la Atención',
+      sc_label_nombres: 'Nombres y Apellidos',
+      sc_err_nombres: 'Ingresa el nombre del paciente',
+      sc_label_identificacion: 'Identificación',
+      sc_label_sexo: 'Sexo',
+      sc_opt_femenino: 'Femenino',
+      sc_opt_masculino: 'Masculino',
+      sc_opt_otro: 'Otro',
+      sc_label_fecha_nacimiento: 'Fecha de Nacimiento',
+      sc_label_edad: 'Edad',
+      sc_label_rh: 'RH',
+      sc_label_telefono: 'Teléfono',
+      sc_label_correo: 'Correo',
+      sc_label_estado_civil: 'Estado Civil',
+      sc_label_direccion: 'Dirección',
+      sc_label_lugar_residencia: 'Lugar de Residencia',
+      sc_label_ocupacion: 'Ocupación',
+      sc_label_procedimiento: 'Procedimiento',
+      sc_label_doctora: 'Doctor(a)',
+      sc_label_hgm: 'HGM',
+      sc_label_peso: 'Peso (kg)',
+      sc_label_estatura: 'Estatura (m)',
+      sc_label_responsable: 'Responsable',
+      sc_label_parentesco: 'Parentesco',
+      sc_label_celular_responsable: 'Celular',
+      sc_label_entidad: 'Entidad',
+      sc_label_numero_afiliacion: 'No. Afiliación',
+      sc_label_particular: 'Particular',
+      sc_label_fecha_ingreso: 'Fecha de Ingreso',
+      sc_label_tipo_afiliacion: 'Tipo de Afiliación',
+      sc_label_servicio: 'Servicio',
+      sc_label_eps: 'EPS',
+      sc_placeholder_eps: 'Particular / Subsidiado / Contributivo',
+      sc_label_prepagada: 'Prepagada',
+      sc_label_servicio_complementario: 'Servicio Complementario',
+      btn_sc_atras: '← Atrás',
+      btn_sc_continuar: 'Guardar y continuar',
       datos_titulo: 'Datos de la Admisión',
       datos_desc: 'Estos datos se usarán en todos los documentos que el paciente firmará a continuación.',
       datos_section_titular: 'Datos del Titular',
@@ -1204,6 +1455,7 @@
       btn_pendientes_salida: 'Pending Check-outs',
       btn_paciente_nuevo: 'New patient registration (walk-in)',
       btn_equipos: 'Medical equipment check-in',
+      proc_sala_cirugias: 'Surgery Room',
       badge_ley: 'Colombian Law 1581 of 2012',
       staff_titulo: 'Patient Admission',
       staff_desc: "Before handing the tablet to the patient, select the procedures being performed today. The general documents (data policy, welcome letter, liability waiver, and image use) are always included.",
@@ -1211,6 +1463,48 @@
       staff_section_sub: 'Only check the ones that apply to this visit.',
       btn_staff_atras: '← Home',
       btn_staff_continuar: 'Continue with patient',
+      sc_titulo: 'Surgery Room Admission',
+      sc_desc: 'Front desk fills out this administrative information before handing the tablet to the patient.',
+      sc_section_paciente: 'Patient Information',
+      sc_section_responsable: 'Account Responsible Party',
+      sc_section_entidad: 'Responsible Entity',
+      sc_section_atencion: 'Visit Information',
+      sc_label_nombres: 'Full Name',
+      sc_err_nombres: 'Enter the patient name',
+      sc_label_identificacion: 'ID Number',
+      sc_label_sexo: 'Sex',
+      sc_opt_femenino: 'Female',
+      sc_opt_masculino: 'Male',
+      sc_opt_otro: 'Other',
+      sc_label_fecha_nacimiento: 'Date of Birth',
+      sc_label_edad: 'Age',
+      sc_label_rh: 'Blood Type',
+      sc_label_telefono: 'Phone',
+      sc_label_correo: 'Email',
+      sc_label_estado_civil: 'Marital Status',
+      sc_label_direccion: 'Address',
+      sc_label_lugar_residencia: 'Place of Residence',
+      sc_label_ocupacion: 'Occupation',
+      sc_label_procedimiento: 'Procedure',
+      sc_label_doctora: 'Doctor',
+      sc_label_hgm: 'HGM',
+      sc_label_peso: 'Weight (kg)',
+      sc_label_estatura: 'Height (m)',
+      sc_label_responsable: 'Responsible Party',
+      sc_label_parentesco: 'Relationship',
+      sc_label_celular_responsable: 'Mobile Phone',
+      sc_label_entidad: 'Entity',
+      sc_label_numero_afiliacion: 'Membership No.',
+      sc_label_particular: 'Private Pay',
+      sc_label_fecha_ingreso: 'Admission Date',
+      sc_label_tipo_afiliacion: 'Membership Type',
+      sc_label_servicio: 'Service',
+      sc_label_eps: 'Health Insurance',
+      sc_placeholder_eps: 'Private / Subsidized / Contributory',
+      sc_label_prepagada: 'Prepaid Plan',
+      sc_label_servicio_complementario: 'Supplementary Service',
+      btn_sc_atras: '← Back',
+      btn_sc_continuar: 'Save and continue',
       datos_titulo: 'Admission Details',
       datos_desc: 'This information will be used in every document the patient signs next.',
       datos_section_titular: 'Patient Information',
@@ -1408,17 +1702,128 @@
       });
       listaProc.appendChild(wrap);
     });
+
+    // "Sala de Cirugías" es distinta al resto: no tiene documentos de
+    // consentimiento propios (por ahora), así que no vive en DOCS/
+    // ORDEN_PROCEDIMIENTOS — es solo un checkbox más en esta lista que,
+    // al marcarse, lleva a un formulario corto de datos básicos en vez
+    // del flujo normal de firma de documentos.
+    var marcadaCirugias = !!marcados['sala_cirugias'];
+    var wrapCirugias = document.createElement('div');
+    wrapCirugias.className = 'check-wrap stack';
+    wrapCirugias.innerHTML =
+      '<input type="checkbox" data-proc="sala_cirugias" />' +
+      '<div class="check-box"></div>' +
+      '<span class="check-label"><strong data-i18n="proc_sala_cirugias">' + escapeHtml(t('proc_sala_cirugias')) + '</strong></span>';
+    var inputCirugias = wrapCirugias.querySelector('input');
+    inputCirugias.checked = marcadaCirugias;
+    wrapCirugias.classList.toggle('checked', marcadaCirugias);
+    wrapCirugias.addEventListener('click', function () {
+      inputCirugias.checked = !inputCirugias.checked;
+      wrapCirugias.classList.toggle('checked', inputCirugias.checked);
+    });
+    listaProc.appendChild(wrapCirugias);
   }
   renderListaProcedimientos();
 
   document.getElementById('btn-staff-continuar').addEventListener('click', function () {
+    var marcadaCirugias = !!(listaProc.querySelector('input[data-proc="sala_cirugias"]') || {}).checked;
     estado.procedimientos = ORDEN_PROCEDIMIENTOS.filter(function (key) {
       var el = listaProc.querySelector('input[data-proc="' + key + '"]');
       return el && el.checked;
     });
     document.getElementById('campos-anestesiologo').style.display = estado.procedimientos.indexOf('anestesia') > -1 ? 'grid' : 'none';
     document.getElementById('campos-enfermero').style.display = estado.procedimientos.indexOf('venopuncion') > -1 ? 'grid' : 'none';
+
+    // "Sala de Cirugías" no tiene documentos de consentimiento (por ahora):
+    // en vez de entrar al flujo normal de firma, lleva a un formulario
+    // corto aparte (nombre, apellido, documento, correo, teléfono).
+    if (marcadaCirugias) {
+      window.location.href = '/consentimiento/cirugias/?lang=' + estado.lang;
+      return;
+    }
     irAPantalla('pantalla-datos');
+  });
+
+  // ── PASO 0.5 (YA NO SE USA): "Sala de Cirugías" ahora es un checkbox más
+  // en "Procedimientos de hoy" que lleva a un formulario corto aparte (ver
+  // más arriba), en vez de a esta pantalla completa. Este bloque queda sin
+  // conectar a ningún botón visible; se deja el código de la pantalla por
+  // si se necesita reactivar el formulario completo más adelante.
+  document.getElementById('btn-sc-atras').addEventListener('click', function () {
+    irAPantalla('pantalla-staff');
+  });
+
+  document.getElementById('btn-sc-continuar').addEventListener('click', function () {
+    var nombreEl = document.getElementById('sc-nombres');
+    var errEl = document.getElementById('err-sc-nombres');
+    if (!nombreEl.value.trim()) {
+      nombreEl.classList.add('error');
+      errEl.classList.add('show');
+      nombreEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    nombreEl.classList.remove('error');
+    errEl.classList.remove('show');
+
+    var btn = document.getElementById('btn-sc-continuar');
+    var spinner = document.getElementById('spinner-sc');
+    btn.disabled = true;
+    spinner.style.display = 'block';
+
+    var val = function (id) { return document.getElementById(id).value.trim(); };
+    var payload = {
+      idioma: estado.lang,
+      nombres_apellidos: val('sc-nombres'),
+      identificacion: val('sc-identificacion'),
+      sexo: val('sc-sexo'),
+      edad: val('sc-edad'),
+      fecha_nacimiento: val('sc-fecha-nacimiento'),
+      rh: val('sc-rh'),
+      telefono: val('sc-telefono'),
+      correo: val('sc-correo'),
+      estado_civil: val('sc-estado-civil'),
+      direccion: val('sc-direccion'),
+      lugar_residencia: val('sc-lugar-residencia'),
+      ocupacion: val('sc-ocupacion'),
+      procedimiento: val('sc-procedimiento'),
+      doctora: val('sc-doctora'),
+      hgm: val('sc-hgm'),
+      peso: val('sc-peso'),
+      estatura: val('sc-estatura'),
+      responsable: val('sc-responsable'),
+      parentesco: val('sc-parentesco'),
+      celular_responsable: val('sc-celular-responsable'),
+      entidad: val('sc-entidad'),
+      numero_afiliacion: val('sc-numero-afiliacion'),
+      particular: val('sc-particular'),
+      fecha_ingreso: val('sc-fecha-ingreso'),
+      tipo_afiliacion: val('sc-tipo-afiliacion'),
+      servicio: val('sc-servicio'),
+      eps: val('sc-eps'),
+      prepagada: val('sc-prepagada'),
+      servicio_complementario: val('sc-servicio-complementario'),
+      user_agent: navigator.userAgent
+    };
+
+    fetch('/consentimiento/admision-cirugias/guardar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function (res) {
+      return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+    }).then(function (r) {
+      if (!r.ok) throw new Error(r.data.mensaje || 'Error del servidor');
+      irAPantalla('pantalla-datos');
+    }).catch(function (err) {
+      console.error(err);
+      alert((estado.lang === 'en'
+        ? 'There was a problem saving the admission form.\n\n'
+        : 'Hubo un problema al guardar la admisión.\n\n') + err.message);
+    }).finally(function () {
+      btn.disabled = false;
+      spinner.style.display = 'none';
+    });
   });
 
   // ── PASO 1: DATOS DEL PACIENTE Y EQUIPO ─────────────────────────────────
@@ -1550,7 +1955,7 @@
     document.getElementById('header-app').style.display = (id === 'pantalla-inicio') ? 'none' : 'flex';
     // Las pantallas de formulario (sin texto largo que leer) aprovechan
     // mucho más ancho de la tablet que las de lectura de documentos.
-    var pantallasAnchas = ['pantalla-inicio', 'pantalla-staff', 'pantalla-datos', 'pantalla-documento'];
+    var pantallasAnchas = ['pantalla-inicio', 'pantalla-staff', 'pantalla-admision-cirugias', 'pantalla-datos', 'pantalla-documento'];
     document.querySelector('.container').classList.toggle('ancho', pantallasAnchas.indexOf(id) > -1);
     window.scrollTo({ top: 0, behavior: 'smooth' });
     actualizarProgreso();
@@ -1909,6 +2314,9 @@
     cola = [];
     indiceDoc = -1;
     document.querySelectorAll('#pantalla-datos input, #pantalla-datos select').forEach(function (el) { el.value = ''; });
+    document.querySelectorAll('#pantalla-admision-cirugias input, #pantalla-admision-cirugias select').forEach(function (el) { el.value = ''; });
+    document.getElementById('sc-nombres').classList.remove('error');
+    document.getElementById('err-sc-nombres').classList.remove('show');
     inputRepr.checked = false;
     checkRepr.classList.remove('checked');
     document.getElementById('subcampos-representante').classList.remove('show');

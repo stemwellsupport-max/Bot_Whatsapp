@@ -44,6 +44,23 @@
   .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   @media (max-width: 460px) { .row-2 { grid-template-columns: 1fr; } }
 
+  /* ── AUTOCOMPLETAR VISITANTES YA REGISTRADOS ──
+     Segunda+ visita: en vez de volver a escribir todo (y equivocarse),
+     eligen su nombre/documento de una lista y se rellena el resto. */
+  .campo-autocomplete { position: relative; }
+  .autocomplete-lista {
+    display: none; position: absolute; left: 0; right: 0; top: calc(100% + 4px);
+    background: var(--blanco); border: 1.5px solid var(--borde); border-radius: 12px;
+    box-shadow: 0 10px 28px rgba(0,0,0,.12); max-height: 260px; overflow-y: auto; z-index: 30;
+  }
+  .autocomplete-lista.mostrar { display: block; }
+  .autocomplete-item { padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--borde); }
+  .autocomplete-item:last-child { border-bottom: none; }
+  .autocomplete-item:hover, .autocomplete-item.activo { background: var(--verde-claro); }
+  .autocomplete-item .ac-nombre { font-size: 14.5px; font-weight: 600; color: var(--texto); }
+  .autocomplete-item .ac-documento { font-size: 12.5px; color: var(--gris); margin-top: 2px; }
+  .autocomplete-vacio { padding: 12px 16px; font-size: 13px; color: var(--gris); }
+
   /* Red de seguridad para pantallas bajas (poco alto disponible): reduce el espaciado para seguir cabiendo sin scroll, sin afectar el tamaño amplio que se usa en la tablet real (1920x1080). */
   @media (max-height: 820px) {
     .header { padding: 6px 24px; }
@@ -151,16 +168,18 @@
           <input type="date" id="fecha" />
           <div class="field-error" id="err-fecha"></div>
         </div>
-        <div class="field">
+        <div class="field campo-autocomplete">
           <label class="campo-label" id="lbl-nombre"></label>
-          <input type="text" id="nombre" autocomplete="name" />
+          <input type="text" id="nombre" autocomplete="off" />
+          <div class="autocomplete-lista" id="sugerencias-nombre"></div>
           <div class="field-error" id="err-nombre"></div>
         </div>
       </div>
       <div class="row-2">
-        <div class="field">
+        <div class="field campo-autocomplete">
           <label class="campo-label" id="lbl-documento"></label>
-          <input type="text" id="documento" inputmode="numeric" />
+          <input type="text" id="documento" inputmode="numeric" autocomplete="off" />
+          <div class="autocomplete-lista" id="sugerencias-documento"></div>
           <div class="field-error" id="err-documento"></div>
         </div>
         <div class="field">
@@ -335,6 +354,67 @@
   document.getElementById('fecha').value = ahora.toISOString().slice(0, 10);
   document.getElementById('hora-ingreso').value =
     String(ahora.getHours()).padStart(2, '0') + ':' + String(ahora.getMinutes()).padStart(2, '0');
+
+  // ── AUTOCOMPLETAR VISITANTES YA REGISTRADOS ─────────────────────────────
+  // Trae la lista una sola vez al cargar; si falla (sin conexión, etc.) el
+  // formulario sigue funcionando normal, solo sin sugerencias.
+  var visitantesPrevios = [];
+  fetch('/consentimiento/registro/visitantes-previos')
+    .then(function (res) { return res.ok ? res.json() : { visitantes: [] }; })
+    .then(function (data) { visitantesPrevios = data.visitantes || []; })
+    .catch(function () { visitantesPrevios = []; });
+
+  function normalizar(s) {
+    return (s || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  }
+
+  function rellenarDesdeVisitante(v) {
+    document.getElementById('nombre').value = v.nombre;
+    document.getElementById('documento').value = v.documento;
+    document.getElementById('rh').value = v.rh || '';
+    document.getElementById('eps').value = v.eps || '';
+    document.getElementById('contacto').value = v.contacto_emergencia || '';
+    document.getElementById('telefono').value = v.telefono || '';
+    marcarError('nombre', false); marcarError('documento', false);
+    marcarError('contacto', false); marcarError('telefono', false);
+  }
+
+  function configurarAutocomplete(inputId, listaId, campo) {
+    var input = document.getElementById(inputId);
+    var lista = document.getElementById(listaId);
+
+    function ocultar() { lista.classList.remove('mostrar'); lista.innerHTML = ''; }
+
+    input.addEventListener('input', function () {
+      var q = normalizar(input.value.trim());
+      if (q.length < 2) { ocultar(); return; }
+      var coincidencias = visitantesPrevios.filter(function (v) {
+        return normalizar(v[campo]).indexOf(q) !== -1;
+      }).slice(0, 8);
+      if (!coincidencias.length) { ocultar(); return; }
+      lista.innerHTML = coincidencias.map(function (v) {
+        return '<div class="autocomplete-item">' +
+          '<div class="ac-nombre">' + escapeHtml(v.nombre) + '</div>' +
+          '<div class="ac-documento">' + escapeHtml(v.documento) + '</div>' +
+        '</div>';
+      }).join('');
+      Array.prototype.forEach.call(lista.querySelectorAll('.autocomplete-item'), function (el, i) {
+        el.addEventListener('click', function () { rellenarDesdeVisitante(coincidencias[i]); ocultar(); });
+      });
+      lista.classList.add('mostrar');
+    });
+
+    input.addEventListener('blur', function () { setTimeout(ocultar, 150); });
+  }
+
+  function escapeHtml(s) {
+    return (s || '').toString().replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  configurarAutocomplete('nombre', 'sugerencias-nombre', 'nombre');
+  configurarAutocomplete('documento', 'sugerencias-documento', 'documento');
 
   // ── FIRMA (CANVAS) ──────────────────────────────────────────────────────
   var canvas = document.getElementById('firma-canvas');
