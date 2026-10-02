@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title id="page-title">Califícanos · Stemwell</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --verde: #00B2C2; --verde-claro: #E6F7F9; --texto: #1C2B26; --gris: #6B7B76;
+    --borde: #D4E6DF; --fondo: #F7FAF8; --blanco: #FFFFFF; --error: #C0392B; --max-w: 560px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Poppins', sans-serif; background: var(--fondo); color: var(--texto); min-height: 100vh; }
+  .header { background: var(--blanco); border-bottom: 1px solid var(--borde); padding: 10px 24px; display: flex; align-items: center; position: sticky; top: 0; z-index: 10; }
+  .header img { height: 54px; width: auto; }
+  .container { max-width: var(--max-w); margin: 0 auto; padding: 14px 20px 18px; }
+  @media (min-width: 700px) { :root { --max-w: 680px; } }
+  @media (min-width: 1000px) { :root { --max-w: 900px; } }
+  .titulo-simple { margin-bottom: 14px; }
+  .titulo-simple h2 { font-size: clamp(20px, 2.6vw, 28px); font-weight: 800; color: var(--verde); margin-bottom: 6px; }
+  .titulo-simple p { font-size: clamp(13px, 1vw, 15px); color: var(--gris); line-height: 1.4; }
+
+  .section { background: var(--blanco); border-radius: 16px; padding: 12px 16px; margin-bottom: 8px; border: 1px solid var(--borde); }
+  .section-title { font-size: 12.5px; font-weight: 600; color: var(--texto); margin-bottom: 8px; line-height: 1.4; }
+  .section-title span.req { color: var(--verde); margin-left: 2px; }
+  .field-error { font-size: 11.5px; color: var(--error); margin-top: 6px; display: none; }
+  .field-error.show { display: block; }
+
+  /* Preguntas de calificación: mismas píldoras que la encuesta completa */
+  .pill-fila { display: flex; flex-wrap: wrap; gap: 7px; }
+  .pill-opcion {
+    padding: 8px 13px; border-radius: 20px; border: 1.5px solid var(--borde); background: var(--blanco);
+    font-family: 'Poppins', sans-serif; font-size: 12px; font-weight: 500; color: var(--texto);
+    cursor: pointer; transition: all .15s; user-select: none; white-space: nowrap;
+  }
+  .pill-opcion:hover { border-color: var(--verde); background: var(--verde-claro); }
+  .pill-opcion.checked { background: var(--verde); border-color: var(--verde); color: white; }
+  .grid { display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 8px; }
+  .grid .section { margin-bottom: 0; }
+  @media (min-width: 640px) { .grid { grid-template-columns: 1fr 1fr; } }
+
+  .section.opinion { padding: 14px 16px; }
+  .section.opinion .section-title { font-size: 13.5px; }
+  textarea {
+    width: 100%; padding: 12px 15px; border: 1.5px solid var(--borde); border-radius: 11px; min-height: 90px; resize: vertical;
+    font-family: 'Poppins', sans-serif; font-size: 14px; color: var(--texto); background: var(--fondo);
+    transition: border-color .2s, box-shadow .2s; -webkit-appearance: none;
+  }
+  textarea:focus { outline: none; border-color: var(--verde); box-shadow: 0 0 0 3px rgba(0,178,194,.12); background: var(--blanco); }
+
+  .btn-enviar {
+    width: 100%; padding: 16px; margin-top: 6px; background: var(--verde); color: white; border: none; border-radius: 14px;
+    font-family: 'Poppins', sans-serif; font-size: 16.5px; font-weight: 600; cursor: pointer; transition: all .2s;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+  }
+  .btn-enviar:hover:not(:disabled) { background: #0093a0; transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,178,194,.3); }
+  .btn-enviar:disabled { opacity: .6; cursor: not-allowed; }
+  .spinner { width: 20px; height: 20px; border: 2px solid rgba(255,255,255,.3); border-top-color: white; border-radius: 50%; animation: spin .7s linear infinite; display: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error-envio { font-size: 12.5px; color: var(--error); text-align: center; margin-top: 10px; min-height: 18px; }
+
+  /* Campo-trampa para robots: una persona no lo ve ni lo toca. */
+  .trampa { position: absolute; left: -9999px; top: auto; width: 1px; height: 1px; overflow: hidden; }
+
+  #pantalla-gracias { display: none; flex-direction: column; align-items: center; text-align: center; padding: 60px 24px; }
+  .exito-icono { width: 80px; height: 80px; background: var(--verde-claro); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 22px; }
+  .exito-icono svg { width: 40px; height: 40px; }
+  #pantalla-gracias h2 { font-size: 24px; color: var(--verde); margin-bottom: 10px; font-weight: 700; }
+  #pantalla-gracias p { font-size: 14.5px; color: var(--gris); line-height: 1.65; max-width: 360px; }
+</style>
+</head>
+<body>
+
+<header class="header"><img src="/images/STEMWELL_LOGO_.png" alt="Stemwell" /></header>
+
+<div class="container">
+  <div id="pantalla-form">
+    <div class="trampa" aria-hidden="true"><input type="text" id="campo_extra_x" name="campo_extra_x" tabindex="-1" autocomplete="off" /></div>
+    <div class="titulo-simple">
+      <h2 id="txt-titulo"></h2>
+      <p id="txt-intro"></p>
+    </div>
+
+    <div class="grid" id="preguntas"></div>
+
+    <div class="section opinion">
+      <div class="section-title" id="txt-opinion-titulo"></div>
+      <textarea id="opinion"></textarea>
+    </div>
+
+    <button class="btn-enviar" id="btn-enviar" type="button">
+      <span id="btn-texto"></span>
+      <div class="spinner" id="spinner"></div>
+    </button>
+    <div class="error-envio" id="txt-error-envio"></div>
+  </div>
+
+  <div id="pantalla-gracias">
+    <div class="exito-icono">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#1A7A5E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12"/>
+      </svg>
+    </div>
+    <h2 id="txt-gracias-titulo"></h2>
+    <p id="txt-gracias-texto"></p>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // Mismas escalas (y mismo orden) que la encuesta de satisfacción completa.
+  var ESCALA4 = [
+    { valor: 4, es: 'Muy bueno', en: 'Very Good' },
+    { valor: 3, es: 'Bueno', en: 'Good' },
+    { valor: 2, es: 'Malo', en: 'Bad' },
+    { valor: 1, es: 'Muy malo', en: 'Very Bad' }
+  ];
+  var ESCALA5 = [
+    { valor: 5, es: 'Muy buena', en: 'Very Good' },
+    { valor: 4, es: 'Buena', en: 'Good' },
+    { valor: 3, es: 'Regular', en: 'Fair' },
+    { valor: 2, es: 'Mala', en: 'Bad' },
+    { valor: 1, es: 'Muy mala', en: 'Very Bad' }
+  ];
+  var ESCALA_RECOMENDACION = [
+    { valor: 4, es: 'Definitivamente sí', en: 'Definitely Yes' },
+    { valor: 3, es: 'Probablemente sí', en: 'Probably Yes' },
+    { valor: 2, es: 'Probablemente no', en: 'Probably no' },
+    { valor: 1, es: 'Definitivamente no', en: 'Definitely no' }
+  ];
+
+  var TEXTOS = {
+    es: {
+      tituloPagina: 'Califícanos · Stemwell',
+      titulo: 'Califica tu experiencia',
+      intro: 'Su retroalimentación nos permite mejorar nuestro servicio profesional. Solo toma un momento.',
+      personalTitulo: '¿Cómo califica el personal asistencia médico?',
+      recomendariaTitulo: '¿Recomendaría la Clínica a un familiar o amigo(a)?',
+      satisfaccionTitulo: '¿Qué tan satisfecho está con el servicio brindado?',
+      instalacionesTitulo: '¿Cómo calificaría las instalaciones de la Clínica?',
+      claridadTitulo: '¿Qué tan clara fue la información brindada por el personal?',
+      opinionTitulo: 'Cuéntanos tu opinión',
+      opinionPlaceholder: 'Escribe aquí tu opinión (opcional)…',
+      erOpcion: 'Selecciona una opción',
+      enviar: 'Enviar',
+      enviando: 'Enviando…',
+      limiteDispositivo: 'Ya se enviaron varias calificaciones desde este dispositivo. Por favor inténtalo más tarde.',
+      graciasTitulo: '¡Muchas gracias!',
+      graciasTexto: 'Tu opinión fue registrada y nos ayuda a mejorar el servicio de la Clínica Stemwell.',
+      errorGuardar: 'Hubo un problema al guardar tu calificación. Inténtalo de nuevo.'
+    },
+    en: {
+      tituloPagina: 'Rate us · Stemwell',
+      titulo: 'Rate your experience',
+      intro: 'Your feedback helps us improve our professional service. It only takes a moment.',
+      personalTitulo: 'How would you rate the care provided by the medical staff?',
+      recomendariaTitulo: 'Would you recommend the Clinic to a family member or friend?',
+      satisfaccionTitulo: 'How satisfied are you with the service provided?',
+      instalacionesTitulo: 'How would you rate the facilities of the Clinic?',
+      claridadTitulo: 'How clear was the information provided by the staff?',
+      opinionTitulo: 'Tell us your opinion',
+      opinionPlaceholder: 'Write your opinion here (optional)…',
+      erOpcion: 'Please select an option',
+      enviar: 'Submit',
+      enviando: 'Submitting…',
+      limiteDispositivo: 'Several ratings were already sent from this device. Please try again later.',
+      graciasTitulo: 'Thank you very much!',
+      graciasTexto: 'Your feedback was recorded and helps us improve the Stemwell Clinic service.',
+      errorGuardar: 'There was a problem saving your rating. Please try again.'
+    }
+  };
+
+  var lang = new URLSearchParams(window.location.search).get('lang') === 'en' ? 'en' : 'es';
+  var t = TEXTOS[lang];
+  document.documentElement.lang = lang;
+  document.getElementById('page-title').textContent = t.tituloPagina;
+  document.getElementById('txt-titulo').textContent = t.titulo;
+  document.getElementById('txt-intro').textContent = t.intro;
+  document.getElementById('txt-opinion-titulo').textContent = t.opinionTitulo;
+  document.getElementById('opinion').placeholder = t.opinionPlaceholder;
+  document.getElementById('btn-texto').textContent = t.enviar;
+  document.getElementById('txt-gracias-titulo').textContent = t.graciasTitulo;
+  document.getElementById('txt-gracias-texto').textContent = t.graciasTexto;
+
+  var respuestas = {};
+  var inicioPagina = Date.now(); // para saber cuánto tardó en llenarla (frena robots)
+
+  // Límite suave por dispositivo: máximo 5 envíos por hora desde este navegador
+  // (compartido con la encuesta completa). Es solo una capa de ayuda: el freno
+  // real está en el servidor. Se deja un margen porque en la clínica varias
+  // personas pueden usar el mismo aparato.
+  var CLAVE_ENVIOS = 'sw_envios_encuestas';
+  var MAX_ENVIOS_DISPOSITIVO = 5;
+  function enviosRecientes() {
+    try {
+      return JSON.parse(localStorage.getItem(CLAVE_ENVIOS) || '[]').filter(function (x) { return Date.now() - x < 3600000; });
+    } catch (e) { return []; }
+  }
+  function anotarEnvio() {
+    try {
+      var lista = enviosRecientes(); lista.push(Date.now());
+      localStorage.setItem(CLAVE_ENVIOS, JSON.stringify(lista));
+    } catch (e) { /* si el navegador no permite guardar, se sigue sin límite local */ }
+  }
+
+  // Cada pregunta: [id, título, escala, campo que se envía al servidor]
+  var PREGUNTAS = [
+    ['personal', t.personalTitulo, ESCALA4, 'calificacion_personal'],
+    ['recomendaria', t.recomendariaTitulo, ESCALA_RECOMENDACION, 'recomendaria'],
+    ['satisfaccion', t.satisfaccionTitulo, ESCALA4, 'satisfaccion_general'],
+    ['instalaciones', t.instalacionesTitulo, ESCALA5, 'calificacion_instalaciones'],
+    ['claridad', t.claridadTitulo, ESCALA5, 'claridad_informacion']
+  ];
+
+  var contenedor = document.getElementById('preguntas');
+  PREGUNTAS.forEach(function (p) {
+    var id = p[0], titulo = p[1], opciones = p[2], campo = p[3];
+    var wrap = document.createElement('div');
+    wrap.className = 'section';
+    var html = '<div class="section-title">' + titulo + ' <span class="req">*</span></div><div class="pill-fila">';
+    opciones.forEach(function (op) {
+      html += '<div class="pill-opcion" data-valor="' + op.valor + '">' + op[lang] + '</div>';
+    });
+    html += '</div><div class="field-error" id="err-' + id + '">' + t.erOpcion + '</div>';
+    wrap.innerHTML = html;
+    wrap.querySelectorAll('.pill-opcion').forEach(function (el) {
+      el.addEventListener('click', function () {
+        wrap.querySelectorAll('.pill-opcion').forEach(function (o) { o.classList.remove('checked'); });
+        el.classList.add('checked');
+        respuestas[campo] = parseInt(el.getAttribute('data-valor'), 10);
+        document.getElementById('err-' + id).classList.remove('show');
+      });
+    });
+    contenedor.appendChild(wrap);
+  });
+
+  function validar() {
+    var ok = true;
+    PREGUNTAS.forEach(function (p) {
+      var err = document.getElementById('err-' + p[0]);
+      if (!respuestas[p[3]]) { err.classList.add('show'); ok = false; } else err.classList.remove('show');
+    });
+    if (!ok) {
+      var primero = document.querySelector('.field-error.show');
+      if (primero) primero.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    return ok;
+  }
+
+  document.getElementById('btn-enviar').addEventListener('click', function () {
+    if (!validar()) return;
+    var errEnvio = document.getElementById('txt-error-envio');
+    if (enviosRecientes().length >= MAX_ENVIOS_DISPOSITIVO) { errEnvio.textContent = t.limiteDispositivo; return; }
+    var btn = this;
+    var texto = document.getElementById('btn-texto');
+    var spinner = document.getElementById('spinner');
+    errEnvio.textContent = '';
+    btn.disabled = true;
+    texto.textContent = t.enviando;
+    spinner.style.display = 'block';
+
+    var payload = {
+      idioma: lang,
+      calificacion_personal: respuestas.calificacion_personal,
+      recomendaria: respuestas.recomendaria,
+      satisfaccion_general: respuestas.satisfaccion_general,
+      calificacion_instalaciones: respuestas.calificacion_instalaciones,
+      claridad_informacion: respuestas.claridad_informacion,
+      opinion: document.getElementById('opinion').value.trim(),
+      campo_extra_x: document.getElementById('campo_extra_x').value,
+      tiempo_ms: Date.now() - inicioPagina,
+      user_agent: navigator.userAgent
+    };
+
+    fetch('/consentimiento/calificacion/guardar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function (res) {
+      if (res.ok) return null;
+      // 429 (demasiados envíos) trae un mensaje ya claro para el paciente.
+      if (res.status === 429) return res.json().then(function (d) { throw new Error(d.mensaje || t.errorGuardar); });
+      throw new Error(t.errorGuardar);
+    }).then(function () {
+      anotarEnvio();
+      document.getElementById('pantalla-form').style.display = 'none';
+      document.getElementById('pantalla-gracias').style.display = 'flex';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }).catch(function (err) {
+      console.error(err);
+      errEnvio.textContent = err.message || t.errorGuardar;
+      btn.disabled = false;
+      texto.textContent = t.enviar;
+      spinner.style.display = 'none';
+    });
+  });
+})();
+</script>
+</body>
+</html>

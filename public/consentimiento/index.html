@@ -868,6 +868,9 @@
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
         <span class="icono-badge" id="badge-pendientes-salida"></span>
       </button>
+      <button class="icono-esquina" id="btn-ir-planilla" type="button" data-i18n-title="btn_planilla" title="Ver planilla de registro diaria">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18"/><path d="M8 2v4"/><path d="M16 2v4"/><path d="M8 14h3"/><path d="M8 18h3"/><path d="M14 14h2"/><path d="M14 18h2"/></svg>
+      </button>
       <button class="icono-esquina" id="btn-ir-paciente-nuevo" type="button" data-i18n-title="btn_paciente_nuevo" title="Registro de paciente nuevo (llega caminando)">
         <svg width="22" height="22" viewBox="0 0 448 512" fill="currentColor" stroke="none">
           <path d="M320 48a48 48 0 1 0-96 0a48 48 0 1 0 96 0M125.7 175.5c9.9-9.9 23.4-15.5 37.5-15.5c1.9 0 3.8.1 5.6.3L137.6 254c-9.3 28 1.7 58.8 26.8 74.5l86.2 53.9l-25.4 88.8c-4.9 17 5 34.7 22 39.6s34.7-5 39.6-22l28.7-100.4c5.9-20.6-2.6-42.6-20.7-53.9L238 299l30.9-82.4l5.1 12.3c15 35.8 49.9 59.1 88.7 59.1H384c17.7 0 32-14.3 32-32s-14.3-32-32-32h-21.3c-12.9 0-24.6-7.8-29.5-19.7l-6.3-15c-14.6-35.1-44.1-61.9-80.5-73.1l-48.7-15C186.6 97.8 175 96 163.3 96c-31 0-60.8 12.3-82.7 34.3l-23.2 23.1c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l23.1-23.1zM91.2 352H32c-17.7 0-32 14.3-32 32s14.3 32 32 32h69.6c19 0 36.2-11.2 43.9-28.5l11.5-25.9l-9.5-6a95.4 95.4 0 0 1-37.9-44.9z"/>
@@ -1324,6 +1327,7 @@
       btn_registro: 'Plantilla de Registro',
       btn_graficos: 'Ver Gráficos',
       btn_pendientes_salida: 'Pendientes de salida',
+      btn_planilla: 'Ver planilla de registro diaria',
       btn_paciente_nuevo: 'Registro de paciente nuevo (llega caminando)',
       btn_equipos: 'Ingreso de equipos médicos',
       proc_sala_cirugias: 'Sala de Cirugías',
@@ -1453,6 +1457,7 @@
       btn_registro: 'Registration Log',
       btn_graficos: 'View Charts',
       btn_pendientes_salida: 'Pending Check-outs',
+      btn_planilla: 'View daily visitor log',
       btn_paciente_nuevo: 'New patient registration (walk-in)',
       btn_equipos: 'Medical equipment check-in',
       proc_sala_cirugias: 'Surgery Room',
@@ -1647,6 +1652,9 @@
   });
   document.getElementById('btn-ir-graficos').addEventListener('click', function () {
     window.location.href = '/consentimiento/graficos/?lang=' + estado.lang;
+  });
+  document.getElementById('btn-ir-planilla').addEventListener('click', function () {
+    window.location.href = '/consentimiento/registro/planilla/?lang=' + estado.lang;
   });
   document.getElementById('btn-ir-pendientes-salida').addEventListener('click', function () {
     window.location.href = '/consentimiento/registro/pendientes/?lang=' + estado.lang;

@@ -1,6 +1,7 @@
 // services/ia-local.js - VERSIÓN FINAL CON ENCUESTA Y LISTA DE SERVICIOS
-const { buscarEnConocimiento, guardarConocimiento } = require('./postgres');
+const { buscarEnConocimiento, guardarConocimiento, getHistorialMensajes } = require('./postgres');
 const { responderDeepSeek } = require('./deepseek');
+const { responderClaude } = require('./claude');
 
 const AGENDA_URL = process.env.AGENDA_URL || 'https://ff.healthatom.io/ETDnHN';
 const LM_STUDIO_URL = 'http://localhost:1234/v1/chat/completions';
@@ -171,10 +172,32 @@ async function responderConIA(mensajeUsuario, nombreUsuario, telefono, idiomaFor
     return getListaServicios(idioma);
   }
 
+  // Ultimos mensajes de esta persona: la IA responde con contexto de la
+  // conversacion en vez de tratar cada mensaje como si fuera el primero.
+  var historial = await getHistorialMensajes(telefono, 10);
+
+  // ═══ CLAUDE (ANTHROPIC) PRINCIPAL si hay API key ═══
+  // 2026-09-16: nuevo proveedor principal, probado primero cuando esta
+  // configurado. Si ANTHROPIC_API_KEY no esta definida, este bloque no
+  // hace nada y el comportamiento queda exactamente igual que antes
+  // (DeepSeek -> LM Studio), sin necesidad de tocar nada mas para volver
+  // atras.
+  if (process.env.ANTHROPIC_API_KEY) {
+    try {
+      var respClaude = await responderClaude(mensajeUsuario, idioma, historial);
+      console.log('✅ Claude OK');
+      try { await guardarConocimiento(mensajeUsuario, respClaude, idioma, 0.7); } catch (eC0) {}
+      if (sendMessageFn) iniciarTimerEncuesta(telefono, idioma, sendMessageFn);
+      return respClaude;
+    } catch (eC) {
+      console.log('⚠ Claude falló, probando DeepSeek/LM Studio');
+    }
+  }
+
   // ═══ IA NUBE (DEEPSEEK) PRINCIPAL si hay API key ═══
   if (process.env.DEEPSEEK_API_KEY) {
     try {
-      var respDeep = await responderDeepSeek(mensajeUsuario, idioma);
+      var respDeep = await responderDeepSeek(mensajeUsuario, idioma, historial);
       console.log('\u2705 DeepSeek OK');
       try { await guardarConocimiento(mensajeUsuario, respDeep, idioma, 0.7); } catch (e) {}
       if (sendMessageFn) iniciarTimerEncuesta(telefono, idioma, sendMessageFn);
@@ -201,8 +224,25 @@ async function responderConIA(mensajeUsuario, nombreUsuario, telefono, idiomaFor
   } catch (e6) {
     console.log('\u26a0 LM Studio fall\u00f3 (sin API key externa)');
   }
-  // Último recurso: ningún proveedor de IA respondió. Se marca para que el
-  // caller (handlers.js) pueda escalar a un asesor humano.
+  // ═══ APRENDIZAJE: antes de rendirse, revisar si ya se aprendió una
+  // respuesta a una pregunta parecida. guardarConocimiento() lleva meses
+  // guardando cada respuesta buena (74 preguntas aprendidas), pero nada la
+  // volvía a consultar — el bot "aprendía" pero nunca usaba lo aprendido.
+  // Este es el punto donde más vale la pena: los tres proveedores de IA ya
+  // fallaron, así que reusar una respuesta ya validada es mejor que dejar
+  // al paciente con el mensaje generico de "gracias por contactarnos".
+  try {
+    var aprendido = await buscarEnConocimiento(mensajeUsuario, idioma);
+    if (aprendido && aprendido.respuesta && Number(aprendido.confianza) >= 0.6) {
+      console.log('📚 Usando respuesta aprendida (los 3 proveedores de IA fallaron)');
+      if (sendMessageFn) iniciarTimerEncuesta(telefono, idioma, sendMessageFn);
+      return aprendido.respuesta;
+    }
+  } catch (eK) {}
+
+  // Último recurso: ningún proveedor de IA respondió ni había nada aprendido
+  // parecido. Se marca para que el caller (handlers.js) pueda escalar a un
+  // asesor humano.
   falloTotalPorTelefono.add(telefono);
   var fallback = (idioma === 'en')
     ? '\u00a0 Thank you for contacting Stemwell.\n\n Kr 13 #118-08, Bogot\u00e1\n +57 310 406 8755\n Book: ' + AGENDA_URL

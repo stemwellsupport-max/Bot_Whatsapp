@@ -29,11 +29,17 @@
 > ⚠️ En Docker, `PG_HOST` debe ser `host.docker.internal` para acceder al PostgreSQL que corre en el host de Windows.
 
 ### IA
-| Variable | Descripción |
-|----------|-------------|
+Orden de respaldo (2026-09-16): **Claude → DeepSeek → LM Studio → mensaje genérico**.
+Cada proveedor solo se intenta si su API key está configurada; si `ANTHROPIC_API_KEY`
+no está definida, el bot funciona exactamente igual que antes (DeepSeek → LM Studio).
+
+| Variable | Descripción | Default |
+|----------|-------------|---------|
+| `ANTHROPIC_API_KEY` | (Opcional) Clave de la API de Claude — si está presente, Claude es el proveedor principal | — |
+| `CLAUDE_MODEL` | Modelo de Claude a usar | `claude-opus-5` |
 | `LM_STUDIO_URL` | URL de LM Studio (IA local) |
 | `LM_MODEL` | Modelo de LM Studio |
-| `DEEPSEEK_API_KEY` | (Opcional) Clave de DeepSeek para IA en la nube |
+| `DEEPSEEK_API_KEY` | (Opcional) Clave de DeepSeek para IA en la nube | — |
 | `DEEPSEEK_MODEL` | Modelo de DeepSeek |
 
 ### Agenda

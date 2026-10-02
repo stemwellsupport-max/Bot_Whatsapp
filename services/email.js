@@ -97,7 +97,7 @@ function construirDestinatariosEncuesta() {
 async function enviarCorreoEncuesta({
   idioma, fecha_registro, nombre_completo, procedimientos, procedimiento_otro,
   calificacion_personal, recomendaria, satisfaccion_general,
-  calificacion_instalaciones, claridad_informacion, comentarios_mejora,
+  calificacion_instalaciones, claridad_informacion, comentarios_mejora, opinion,
 }) {
   const destinatarios = construirDestinatariosEncuesta();
 
@@ -124,6 +124,7 @@ async function enviarCorreoEncuesta({
         <tr><td><strong>Claridad de la información</strong></td><td>${ESCALA5[claridad_informacion] || claridad_informacion}</td></tr>
       </table>
       <p><strong>¿En qué podríamos mejorar?</strong><br>${(comentarios_mejora || '').replace(/\n/g, '<br>')}</p>
+      ${opinion ? `<p><strong>Su opinión</strong><br>${opinion.replace(/\n/g, '<br>')}</p>` : ''}
       <p style="color:#6B7B76; font-size:12px;">STEMWELL · NIT 900.439.194-0 · Carrera 13 No. 118-08 · Bogotá D.C.</p>
     </div>
   `;

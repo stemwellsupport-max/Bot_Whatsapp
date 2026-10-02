@@ -105,6 +105,9 @@
   .botones-paso { display: flex; gap: 12px; margin-top: 6px; }
   .botones-paso .btn-enviar { flex: 1; }
 
+  /* Campo-trampa para robots: una persona no lo ve ni lo toca. */
+  .trampa { position: absolute; left: -9999px; top: auto; width: 1px; height: 1px; overflow: hidden; }
+
   #pantalla-exito, #pantalla-resenas { display: none; flex-direction: column; align-items: center; text-align: center; padding: 60px 24px; }
   .exito-icono { width: 80px; height: 80px; background: var(--verde-claro); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 22px; }
   .exito-icono svg { width: 40px; height: 40px; }
@@ -136,6 +139,7 @@
 
 <div class="container">
   <div id="pantalla-form">
+    <div class="trampa" aria-hidden="true"><input type="text" id="campo_extra_x" name="campo_extra_x" tabindex="-1" autocomplete="off" /></div>
     <div class="titulo-simple">
       <h2 id="txt-titulo">&nbsp;</h2>
       <p id="txt-intro"></p>
@@ -242,6 +246,8 @@
       comentariosTitulo: 'Su opinión es valiosa. Por favor, compártanos sus comentarios.',
       comentariosLabel: '¿En qué cree usted podríamos mejorar?',
       comentariosPlaceholder: 'Escribe aquí tu respuesta…',
+      opinionLabel: 'Cuéntanos tu opinión',
+      opinionPlaceholder: 'Escribe aquí tu opinión (opcional)…',
       erComentarios: 'Este campo es obligatorio',
       erOpcion: 'Selecciona una opción',
       inicio: '← Inicio',
@@ -249,6 +255,7 @@
       volverPaso: '← Volver',
       enviar: 'Enviar',
       enviando: 'Enviando…',
+      limiteDispositivo: 'Ya se enviaron varias encuestas desde este dispositivo. Por favor inténtalo más tarde.',
       graciasTitulo: '¡Muchas gracias!',
       graciasTexto: 'Tu opinión fue registrada y nos ayuda a mejorar el servicio de la Clínica Stemwell.',
       finalizar: 'Finalizar',
@@ -276,6 +283,8 @@
       comentariosTitulo: 'Your opinion is valuable. Please share your comments with us.',
       comentariosLabel: 'What do you think we could improve?',
       comentariosPlaceholder: 'Write your answer here…',
+      opinionLabel: 'Tell us your opinion',
+      opinionPlaceholder: 'Write your opinion here (optional)…',
       erComentarios: 'This field is required',
       erOpcion: 'Please select an option',
       inicio: '← Home',
@@ -283,6 +292,7 @@
       volverPaso: '← Back',
       enviar: 'Submit',
       enviando: 'Submitting…',
+      limiteDispositivo: 'Several surveys were already sent from this device. Please try again later.',
       graciasTitulo: 'Thank you very much!',
       graciasTexto: 'Your feedback was recorded and helps us improve the Stemwell Clinic service.',
       finalizar: 'Finish',
@@ -328,6 +338,25 @@
   });
 
   var respuestas = { procedimientos: [], procedimiento_otro: '' };
+  var inicioPagina = Date.now(); // para saber cuánto tardó en llenarla (frena robots)
+
+  // Límite suave por dispositivo: máximo 5 envíos por hora desde este navegador
+  // (compartido con la página de calificación rápida). Es solo una capa de
+  // ayuda: el freno real está en el servidor. Se deja un margen porque en la
+  // clínica varias personas pueden usar el mismo aparato.
+  var CLAVE_ENVIOS = 'sw_envios_encuestas';
+  var MAX_ENVIOS_DISPOSITIVO = 5;
+  function enviosRecientes() {
+    try {
+      return JSON.parse(localStorage.getItem(CLAVE_ENVIOS) || '[]').filter(function (x) { return Date.now() - x < 3600000; });
+    } catch (e) { return []; }
+  }
+  function anotarEnvio() {
+    try {
+      var lista = enviosRecientes(); lista.push(Date.now());
+      localStorage.setItem(CLAVE_ENVIOS, JSON.stringify(lista));
+    } catch (e) { /* si el navegador no permite guardar, se sigue sin límite local */ }
+  }
 
   function crearCampoTexto(id, label, tipo, requerido) {
     var wrap = document.createElement('div');
@@ -407,6 +436,11 @@
         '<label class="campo-label">' + t.comentariosLabel + ' <span style="color:var(--verde)">*</span></label>' +
         '<textarea id="comentarios" placeholder="' + t.comentariosPlaceholder + '"></textarea>' +
         '<div class="field-error" id="err-comentarios">' + t.erComentarios + '</div>' +
+      '</div>' +
+      // Segundo comentario, opcional: no se valida, así que no bloquea el envío.
+      '<div class="field">' +
+        '<label class="campo-label">' + t.opinionLabel + '</label>' +
+        '<textarea id="opinion" placeholder="' + t.opinionPlaceholder + '"></textarea>' +
       '</div>';
     return wrap;
   }
@@ -488,6 +522,7 @@
 
   document.getElementById('btn-enviar').addEventListener('click', function () {
     if (!validarPaso2()) return;
+    if (enviosRecientes().length >= MAX_ENVIOS_DISPOSITIVO) { alert(t.limiteDispositivo); return; }
     var btn = document.getElementById('btn-enviar');
     var texto = document.getElementById('btn-texto');
     var spinner = document.getElementById('spinner');
@@ -507,6 +542,9 @@
       calificacion_instalaciones: respuestas.calificacion_instalaciones,
       claridad_informacion: respuestas.claridad_informacion,
       comentarios_mejora: document.getElementById('comentarios').value.trim(),
+      opinion: document.getElementById('opinion').value.trim(),
+      campo_extra_x: document.getElementById('campo_extra_x').value,
+      tiempo_ms: Date.now() - inicioPagina,
       user_agent: navigator.userAgent
     };
 
@@ -518,15 +556,19 @@
       return res.json().then(function (data) { return { ok: res.ok, data: data }; });
     }).then(function (r) {
       if (r.ok) {
+        anotarEnvio();
         document.getElementById('pantalla-form').style.display = 'none';
         document.getElementById('pantalla-resenas').style.display = 'flex';
         window.scrollTo({ top: 0, behavior: 'smooth' });
       } else {
-        throw new Error(r.data.mensaje || 'Error del servidor');
+        var e = new Error(r.data.mensaje || 'Error del servidor');
+        // 409 (ya respondida) y 429 (demasiados envíos) traen un mensaje ya claro para el paciente.
+        e.directo = (r.status === 409 || r.status === 429);
+        throw e;
       }
     }).catch(function (err) {
       console.error(err);
-      alert((lang === 'en' ? 'There was a problem saving your answer.\n\n' : 'Hubo un problema al guardar tu respuesta.\n\n') + err.message);
+      alert((err.directo ? '' : (lang === 'en' ? 'There was a problem saving your answer.\n\n' : 'Hubo un problema al guardar tu respuesta.\n\n')) + err.message);
     }).finally(function () {
       btn.disabled = false;
       texto.textContent = t.enviar;

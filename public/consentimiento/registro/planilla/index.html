@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex, nofollow" />
+<title id="page-title">Planilla de registro · Stemwell</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --verde: #00B2C2; --verde-claro: #E6F7F9; --texto: #1C2B26; --gris: #6B7B76;
+    --borde: #D4E6DF; --fondo: #F7FAF8; --blanco: #FFFFFF; --error: #C0392B; --ambar: #B7791F; --ambar-claro: #FEF6E4;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Poppins', sans-serif; background: var(--fondo); color: var(--texto); min-height: 100vh; }
+  .header { background: var(--blanco); border-bottom: 1px solid var(--borde); padding: 10px 24px; display: flex; align-items: center; position: sticky; top: 0; z-index: 10; }
+  .header img { height: 54px; width: auto; }
+  .container { max-width: 1280px; margin: 0 auto; padding: 20px 20px 40px; }
+
+  .titulo-simple { margin-bottom: 16px; display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+  .titulo-simple h2 { font-size: clamp(20px, 2.6vw, 28px); font-weight: 800; color: var(--verde); margin-bottom: 4px; }
+  .titulo-simple p { font-size: 13.5px; color: var(--gris); line-height: 1.4; }
+
+  .btn {
+    padding: 11px 16px; background: var(--blanco); color: var(--gris); border: 1.5px solid var(--borde); border-radius: 12px;
+    font-family: 'Poppins', sans-serif; font-size: 13.5px; font-weight: 500; cursor: pointer; transition: all .2s; white-space: nowrap;
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  .btn:hover { border-color: var(--verde); color: var(--verde); }
+  .btn.primario { background: var(--verde); border-color: var(--verde); color: white; }
+  .btn.primario:hover { background: #0093a0; color: white; }
+  .btn svg { width: 16px; height: 16px; }
+
+  .barra { background: var(--blanco); border: 1px solid var(--borde); border-radius: 16px; padding: 14px 16px; margin-bottom: 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .barra .grupo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .barra .espacio { flex: 1; }
+  input[type="date"], input[type="search"] {
+    padding: 10px 12px; border: 1.5px solid var(--borde); border-radius: 12px; background: var(--fondo);
+    font-family: 'Poppins', sans-serif; font-size: 14px; color: var(--texto);
+  }
+  input:focus { outline: none; border-color: var(--verde); box-shadow: 0 0 0 3px rgba(0,178,194,.12); background: var(--blanco); }
+  input[type="search"] { flex: 1 1 220px; min-width: 0; }
+
+  .resumen { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; align-items: center; }
+  .fecha-grande { font-size: 15px; font-weight: 600; color: var(--texto); margin-right: 6px; }
+  .chip { background: var(--verde-claro); color: var(--verde); border-radius: 999px; padding: 5px 14px; font-size: 13px; font-weight: 600; }
+  .chip.aviso { background: var(--ambar-claro); color: var(--ambar); }
+  .actualizado { font-size: 12px; color: var(--gris); margin-left: auto; }
+
+  .tabla-wrap { background: var(--blanco); border: 1px solid var(--borde); border-radius: 16px; overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 1000px; }
+  th { text-align: left; padding: 12px 12px; background: var(--verde-claro); color: var(--verde); font-weight: 600; font-size: 12px; white-space: nowrap; position: sticky; top: 0; }
+  td { padding: 10px 12px; border-top: 1px solid var(--borde); vertical-align: middle; }
+  tr:hover td { background: #FAFDFC; }
+  td.num { color: var(--gris); width: 36px; }
+  td.nombre { font-weight: 600; min-width: 170px; }
+  td.hora { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .sin-salida { color: var(--ambar); font-weight: 600; }
+  .firma-mini { display: block; width: 96px; height: 44px; object-fit: contain; border: 1px solid var(--borde); border-radius: 8px; background: white; }
+  .sin-firma { color: var(--gris); }
+
+  #estado { text-align: center; padding: 56px 20px; color: var(--gris); font-size: 14px; }
+  #estado.error { color: var(--error); }
+
+  .pie-impresion { display: none; }
+
+  @media (max-width: 640px) {
+    .container { padding: 14px 12px 32px; }
+    .barra .espacio { display: none; }
+    input[type="search"] { flex-basis: 100%; }
+  }
+
+  @media print {
+    @page { size: landscape; margin: 12mm; }
+    body { background: white; }
+    .header, .titulo-simple .btn, .barra, .actualizado { display: none !important; }
+    .container { max-width: none; padding: 0; }
+    .tabla-wrap { border: none; overflow: visible; }
+    table { min-width: 0; font-size: 10.5px; }
+    th { position: static; background: #eee; color: #000; }
+    td, th { padding: 6px 7px; }
+    .chip { background: none; border: 1px solid #999; color: #000; }
+    .firma-mini { width: 80px; height: 36px; }
+    .pie-impresion { display: block; margin-top: 10px; font-size: 10px; color: #555; }
+  }
+</style>
+</head>
+<body>
+
+<header class="header"><img src="/images/STEMWELL_LOGO_.png" alt="Stemwell" /></header>
+
+<div class="container">
+  <div class="titulo-simple">
+    <div>
+      <h2 id="txt-titulo"></h2>
+      <p id="txt-intro"></p>
+    </div>
+    <button class="btn" id="btn-inicio" type="button"></button>
+  </div>
+
+  <div class="barra">
+    <div class="grupo">
+      <button class="btn" id="btn-anterior" type="button">‹</button>
+      <input type="date" id="fecha" />
+      <button class="btn" id="btn-siguiente" type="button">›</button>
+      <button class="btn" id="btn-hoy" type="button"></button>
+    </div>
+    <input type="search" id="buscar" />
+    <div class="espacio"></div>
+    <div class="grupo">
+      <button class="btn" id="btn-csv" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span id="txt-csv"></span>
+      </button>
+      <button class="btn primario" id="btn-imprimir" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        <span id="txt-imprimir"></span>
+      </button>
+    </div>
+  </div>
+
+  <div class="resumen" id="resumen">
+    <span class="fecha-grande" id="txt-fecha-grande"></span>
+    <span class="chip" id="chip-total"></span>
+    <span class="chip aviso" id="chip-sin-salida" style="display:none;"></span>
+    <span class="actualizado" id="txt-actualizado"></span>
+  </div>
+
+  <div id="estado"></div>
+
+  <div class="tabla-wrap" id="tabla-wrap" style="display:none;">
+    <table>
+      <thead><tr id="encabezados"></tr></thead>
+      <tbody id="filas"></tbody>
+    </table>
+  </div>
+  <div class="pie-impresion" id="pie-impresion"></div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var TEXTOS = {
+    es: {
+      tituloPagina: 'Planilla de registro · Stemwell',
+      titulo: 'Planilla de registro de visitantes',
+      intro: 'Consulta los visitantes registrados en cada día (SGSST-F02).',
+      inicio: '← Inicio', hoy: 'Hoy', buscar: 'Buscar nombre o documento…',
+      csv: 'Descargar Excel', imprimir: 'Imprimir',
+      cargando: 'Cargando…', vacio: 'No hay visitantes registrados en esta fecha.', sinResultados: 'Ningún visitante coincide con la búsqueda.',
+      errorCargar: 'No se pudo cargar la planilla. Verifica la conexión e inténtalo de nuevo.',
+      total: function (n) { return n + (n === 1 ? ' visitante' : ' visitantes'); },
+      sinSalida: function (n) { return n + (n === 1 ? ' sin salida registrada' : ' sin salida registrada'); },
+      actualizado: 'Actualizado', abrirFirma: 'Ver firma',
+      cols: ['#', 'Ingreso', 'Nombre', 'Documento', 'RH', 'Motivo de la visita', 'EPS', 'Contacto de emergencia', 'Teléfono', 'Salida', 'Firma'],
+      pendiente: 'Pendiente', locale: 'es-CO', archivo: 'planilla-registro-',
+      pie: 'Planilla de registro de visitantes · Stemwell · Impreso el '
+    },
+    en: {
+      tituloPagina: 'Visitor log · Stemwell',
+      titulo: 'Visitor registration log',
+      intro: 'Review the visitors registered on each day (SGSST-F02).',
+      inicio: '← Home', hoy: 'Today', buscar: 'Search by name or ID…',
+      csv: 'Download Excel', imprimir: 'Print',
+      cargando: 'Loading…', vacio: 'No visitors registered on this date.', sinResultados: 'No visitor matches your search.',
+      errorCargar: 'Could not load the log. Check your connection and try again.',
+      total: function (n) { return n + (n === 1 ? ' visitor' : ' visitors'); },
+      sinSalida: function (n) { return n + ' without check-out'; },
+      actualizado: 'Updated', abrirFirma: 'View signature',
+      cols: ['#', 'Check-in', 'Name', 'ID', 'Blood type', 'Reason for visit', 'Health insurer', 'Emergency contact', 'Phone', 'Check-out', 'Signature'],
+      pendiente: 'Pending', locale: 'en-US', archivo: 'visitor-log-',
+      pie: 'Visitor registration log · Stemwell · Printed on '
+    }
+  };
+
+  var lang = new URLSearchParams(window.location.search).get('lang') === 'en' ? 'en' : 'es';
+  var t = TEXTOS[lang];
+  document.documentElement.lang = lang;
+
+  function $(id) { return document.getElementById(id); }
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  $('page-title').textContent = t.tituloPagina;
+  $('txt-titulo').textContent = t.titulo;
+  $('txt-intro').textContent = t.intro;
+  $('btn-inicio').textContent = t.inicio;
+  $('btn-hoy').textContent = t.hoy;
+  $('buscar').placeholder = t.buscar;
+  $('txt-csv').textContent = t.csv;
+  $('txt-imprimir').textContent = t.imprimir;
+  $('encabezados').innerHTML = t.cols.map(function (c) { return '<th>' + escapeHtml(c) + '</th>'; }).join('');
+
+  // Fecha en formato AAAA-MM-DD según el reloj de este aparato (igual que se guarda al registrarse).
+  function aISO(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  function desdeISO(iso) { var p = iso.split('-'); return new Date(+p[0], +p[1] - 1, +p[2]); }
+  function moverDias(iso, n) { var d = desdeISO(iso); d.setDate(d.getDate() + n); return aISO(d); }
+
+  var visitantes = [];
+  var fechaActual = /^\d{4}-\d{2}-\d{2}$/.test(new URLSearchParams(window.location.search).get('fecha') || '')
+    ? new URLSearchParams(window.location.search).get('fecha') : aISO(new Date());
+  var pedido = 0; // evita que una respuesta lenta pise a una más nueva
+
+  function pintarResumen(lista) {
+    var d = desdeISO(fechaActual);
+    var texto = d.toLocaleDateString(t.locale, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    $('txt-fecha-grande').textContent = texto.charAt(0).toUpperCase() + texto.slice(1); // solo la 1.ª letra en mayúscula
+    $('chip-total').textContent = t.total(visitantes.length);
+    var sinSalida = visitantes.filter(function (v) { return !v.hora_salida; }).length;
+    var chip = $('chip-sin-salida');
+    chip.style.display = sinSalida ? '' : 'none';
+    chip.textContent = t.sinSalida(sinSalida);
+    $('pie-impresion').textContent = t.pie + new Date().toLocaleString(t.locale);
+  }
+
+  function pintarTabla() {
+    var q = $('buscar').value.trim().toLowerCase();
+    var lista = visitantes.filter(function (v) {
+      return !q || (v.nombre || '').toLowerCase().indexOf(q) !== -1 || (v.documento || '').toLowerCase().indexOf(q) !== -1;
+    });
+    var estado = $('estado');
+    if (!lista.length) {
+      $('tabla-wrap').style.display = 'none';
+      estado.className = ''; estado.style.display = '';
+      estado.textContent = visitantes.length ? t.sinResultados : t.vacio;
+      return;
+    }
+    estado.style.display = 'none';
+    $('tabla-wrap').style.display = '';
+    $('filas').innerHTML = lista.map(function (v, i) {
+      var firma = v.tiene_firma
+        ? '<a href="/consentimiento/registro/planilla/firma/' + v.id + '" target="_blank" rel="noopener" title="' + escapeHtml(t.abrirFirma) + '"><img class="firma-mini" loading="lazy" alt="" src="/consentimiento/registro/planilla/firma/' + v.id + '" /></a>'
+        : '<span class="sin-firma">—</span>';
+      return '<tr>' +
+        '<td class="num">' + (i + 1) + '</td>' +
+        '<td class="hora">' + escapeHtml(v.hora_ingreso || '—') + '</td>' +
+        '<td class="nombre">' + escapeHtml(v.nombre) + '</td>' +
+        '<td>' + escapeHtml(v.documento) + '</td>' +
+        '<td>' + escapeHtml(v.rh || '—') + '</td>' +
+        '<td>' + escapeHtml(v.motivo_visita) + '</td>' +
+        '<td>' + escapeHtml(v.eps || '—') + '</td>' +
+        '<td>' + escapeHtml(v.contacto_emergencia) + '</td>' +
+        '<td>' + escapeHtml(v.telefono) + '</td>' +
+        '<td class="hora">' + (v.hora_salida ? escapeHtml(v.hora_salida) : '<span class="sin-salida">' + escapeHtml(t.pendiente) + '</span>') + '</td>' +
+        '<td>' + firma + '</td>' +
+      '</tr>';
+    }).join('');
+  }
+
+  function cargar(silencioso) {
+    var mio = ++pedido;
+    var fecha = fechaActual;
+    if (!silencioso) {
+      $('tabla-wrap').style.display = 'none';
+      $('estado').className = ''; $('estado').style.display = ''; $('estado').textContent = t.cargando;
+    }
+    fetch('/consentimiento/registro/planilla/datos?fecha=' + encodeURIComponent(fecha), { credentials: 'same-origin' })
+      .then(function (res) {
+        // Si la sesión venció, el servidor redirige a la pantalla de contraseña.
+        if (res.redirected || res.status === 401 || res.status === 403) { window.location.reload(); throw new Error('sesion'); }
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      })
+      .then(function (data) {
+        if (mio !== pedido) return;
+        visitantes = data.visitantes || [];
+        pintarResumen();
+        pintarTabla();
+        $('txt-actualizado').textContent = t.actualizado + ' ' + new Date().toLocaleTimeString(t.locale, { hour: '2-digit', minute: '2-digit' });
+      })
+      .catch(function (err) {
+        if (mio !== pedido || err.message === 'sesion') return;
+        if (silencioso) return; // no borrar lo que ya se ve por un fallo momentáneo
+        console.error(err);
+        visitantes = [];
+        pintarResumen();
+        $('tabla-wrap').style.display = 'none';
+        $('estado').className = 'error'; $('estado').style.display = ''; $('estado').textContent = t.errorCargar;
+      });
+  }
+
+  function irAFecha(iso) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return;
+    fechaActual = iso;
+    $('fecha').value = iso;
+    var url = new URL(window.location.href);
+    url.searchParams.set('fecha', iso);
+    history.replaceState(null, '', url);
+    cargar(false);
+  }
+
+  $('fecha').value = fechaActual;
+  $('fecha').addEventListener('change', function () { irAFecha(this.value); });
+  $('btn-anterior').addEventListener('click', function () { irAFecha(moverDias(fechaActual, -1)); });
+  $('btn-siguiente').addEventListener('click', function () { irAFecha(moverDias(fechaActual, 1)); });
+  $('btn-hoy').addEventListener('click', function () { irAFecha(aISO(new Date())); });
+  $('buscar').addEventListener('input', pintarTabla);
+  $('btn-inicio').addEventListener('click', function () { window.location.href = '/consentimiento/?lang=' + lang; });
+  $('btn-imprimir').addEventListener('click', function () { window.print(); });
+
+  // Descarga para Excel: CSV con BOM (para que las tildes se vean bien) y protegido
+  // contra "inyección de fórmulas" (celdas que empiezan con = + - @).
+  $('btn-csv').addEventListener('click', function () {
+    function celda(v) {
+      var s = String(v == null ? '' : v);
+      if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
+    var cols = t.cols.slice(0, 10); // sin la columna de firma
+    var filas = [cols.map(celda).join(';')];
+    visitantes.forEach(function (v, i) {
+      filas.push([i + 1, v.hora_ingreso, v.nombre, v.documento, v.rh, v.motivo_visita, v.eps, v.contacto_emergencia, v.telefono, v.hora_salida || t.pendiente].map(celda).join(';'));
+    });
+    var blob = new Blob(['﻿' + filas.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = t.archivo + fechaActual + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+  });
+
+  cargar(false);
+  // Si se está mirando el día de hoy, se actualiza sola cada minuto (llegan visitantes nuevos).
+  setInterval(function () { if (fechaActual === aISO(new Date()) && !document.hidden) cargar(true); }, 60000);
+})();
+</script>
+</body>
+</html>

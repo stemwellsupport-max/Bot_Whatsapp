@@ -635,43 +635,94 @@ async function buscarLeadPorTelefonoEmail({ telefono, email }) {
   return result.rows[0] || null;
 }
 
-async function apiCrearLead({ nombre, telefono, email, canal = 'WhatsApp', notas = '' }) {
+// Pipeline (idioma - alcance) a partir del teléfono; igual que la regla del CRM.
+// '' = no se puede saber (se deja en blanco a propósito, sin adivinar).
+function pipelineParaTelefono(telefono, idioma) {
+  const d = String(telefono || '').replace(/\D/g, '');
+  if (!d) return '';
+  const lang = idioma === 'en' ? 'English' : 'Spanish';
+  const colombiano = (d.startsWith('57') && d.length >= 12) || /^3(0[0-5]|1\d|2[0-4]|5[01])\d{7}$/.test(d);
+  return `${lang} - ${colombiano ? 'Local' : 'International'}`;
+}
+
+// Mismo criterio que create_lead() del CRM: asesor activo al azar (nunca el bot).
+async function asesorAleatorio() {
+  const r = await pool.query(
+    `SELECT id FROM usuarios
+     WHERE rol IN ('asesor','apoyo') AND activo = true AND nombre <> 'bot'
+     ORDER BY RANDOM() LIMIT 1`
+  );
+  return r.rows[0]?.id || null;
+}
+
+// Crea (o actualiza) un lead en el CRM. Para altas de Walk-in (formulario de
+// consentimiento) además deja el lead listo para trabajarse: asesor asignado,
+// pipeline y origen del consentimiento (el paciente firma en el formulario).
+// Regla de origen: si el lead YA existía, su canal original se conserva
+// (el primer contacto manda, p. ej. una campaña de Meta) — el walk-in solo
+// queda anotado, no lo pisa.
+async function apiCrearLead({ nombre, telefono, email, canal = 'WhatsApp', notas = '', idioma = 'es', consentimientoFuente = null }) {
   try {
+    const esWalkIn = String(canal).toLowerCase() === 'walk-in';
     const existente = await buscarLeadPorTelefonoEmail({ telefono, email });
     if (existente) {
+      const previo = await pool.query(
+        `SELECT canal, pipeline, asesor_id, consentimiento_fuente FROM leads WHERE id = $1`,
+        [existente.id]
+      );
+      const l = previo.rows[0] || {};
+      let nota = (notas || '').trim();
+      if (esWalkIn) {
+        const hoy = new Date().toISOString().slice(0, 10);
+        const origen = (l.canal || '').trim();
+        nota = [`[${hoy}] Se registró en persona en la clínica (formulario de Walk-in).` +
+                (origen && origen.toLowerCase() !== 'walk-in' ? ` Canal original conservado: ${origen}.` : ''),
+                nota].filter(Boolean).join('\n');
+      }
+      const asesorId = (esWalkIn && !l.asesor_id) ? await asesorAleatorio() : null;
+      const pipeline = (esWalkIn && !(l.pipeline || '').trim()) ? pipelineParaTelefono(telefono, idioma) : '';
       const updated = await pool.query(
         `UPDATE leads
          SET nombre = COALESCE(NULLIF($1, ''), nombre),
              email = CASE WHEN $2 <> '' THEN $2 ELSE email END,
-             canal = COALESCE(NULLIF($3, ''), canal),
-             notas = COALESCE(NULLIF($4, ''), notas),
+             canal = CASE WHEN COALESCE(NULLIF(canal, ''), '') = '' THEN $3 ELSE canal END,
+             notas = CASE WHEN $4 = '' THEN notas
+                          WHEN COALESCE(notas, '') = '' THEN $4
+                          ELSE notas || E'\n' || $4 END,
+             asesor_id = COALESCE(asesor_id, $6),
+             pipeline = CASE WHEN COALESCE(pipeline, '') = '' AND $7 <> '' THEN $7 ELSE pipeline END,
+             consentimiento_fuente = COALESCE(consentimiento_fuente, $8),
+             fecha_consentimiento = CASE WHEN consentimiento_fuente IS NULL AND $8::text IS NOT NULL
+                                         THEN CURRENT_TIMESTAMP ELSE fecha_consentimiento END,
              fecha_actualizacion = CURRENT_TIMESTAMP
          WHERE id = $5
          RETURNING id`,
-        [nombre || '', email || '', canal || 'WhatsApp', notas || '', existente.id]
+        [nombre || '', email || '', canal || 'WhatsApp', nota, existente.id, asesorId, pipeline, consentimientoFuente]
       );
       const id = updated.rows[0]?.id;
       console.log('✅ [apiCrearLead] Lead actualizado id:', id);
       return id;
     }
 
+    const asesorId = esWalkIn ? await asesorAleatorio() : null;
+    const pipeline = esWalkIn ? pipelineParaTelefono(telefono, idioma) : '';
     const result = await pool.query(
       `INSERT INTO leads (
          nombre, telefono, email, categoria, canal, genero, ciudad, pais, notas,
          metodo_contacto, horario_preferido, sales_status, asesor_id, doctor_id,
          creado_por, pipeline, last_contact_date, admission_date, favorito,
-         program_to_which_belong_it_is
+         program_to_which_belong_it_is, consentimiento_fuente, fecha_consentimiento
        ) VALUES (
          $1, $2, $3, '', $4, '', '', '', $5,
-         '', '', 'New Lead', NULL, NULL,
-         'bot', '', CURRENT_DATE, CURRENT_DATE, FALSE,
-         ''
+         '', '', 'New Lead', $6, NULL,
+         'bot', $7, CURRENT_DATE, CURRENT_DATE, FALSE,
+         '', $8::text, CASE WHEN $8::text IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END
        )
        RETURNING id`,
-      [nombre || '', telefono || '', email || '', canal || 'WhatsApp', notas || '']
+      [nombre || '', telefono || '', email || '', canal || 'WhatsApp', notas || '', asesorId, pipeline, consentimientoFuente]
     );
     const id = result.rows[0]?.id;
-    console.log('✅ [apiCrearLead] Lead creado id:', id);
+    console.log('✅ [apiCrearLead] Lead creado id:', id, esWalkIn ? `(walk-in, asesor ${asesorId || 'sin asignar'}, pipeline ${pipeline || 'sin definir'})` : '');
     return id;
   } catch (e) {
     console.error('❌ [apiCrearLead] Error:', e.message);

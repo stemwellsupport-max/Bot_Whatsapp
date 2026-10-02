@@ -167,6 +167,44 @@ async function initDB() {
       );
     `);
 
+    // Comentario libre opcional "Cuéntanos tu opinión". Se agrega con ALTER
+    // para no tocar las encuestas que ya están guardadas.
+    await client.query(`
+      ALTER TABLE encuestas_satisfaccion
+      ADD COLUMN IF NOT EXISTS opinion TEXT;
+    `);
+
+    // Calificación rápida (link aparte /consentimiento/calificacion/): las mismas
+    // 5 preguntas de calificación de la encuesta + opinión libre, pero SIN
+    // nombre, fecha ni procedimiento. Va en su propia tabla para no mezclarse
+    // con la encuesta completa ni alterar sus gráficos.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS calificaciones_rapidas (
+        id                          SERIAL PRIMARY KEY,
+        idioma                      VARCHAR(5) DEFAULT 'es',
+        calificacion_personal       SMALLINT,
+        recomendaria                SMALLINT,
+        satisfaccion_general        SMALLINT,
+        calificacion_instalaciones  SMALLINT,
+        claridad_informacion        SMALLINT,
+        opinion                     TEXT,
+        user_agent                  TEXT DEFAULT '',
+        creado_en                   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    // La primera versión de esta tabla (una sola nota) quedó vacía y se
+    // reemplaza por las columnas nuevas.
+    await client.query(`
+      ALTER TABLE calificaciones_rapidas
+        ADD COLUMN IF NOT EXISTS calificacion_personal       SMALLINT,
+        ADD COLUMN IF NOT EXISTS recomendaria                SMALLINT,
+        ADD COLUMN IF NOT EXISTS satisfaccion_general        SMALLINT,
+        ADD COLUMN IF NOT EXISTS calificacion_instalaciones  SMALLINT,
+        ADD COLUMN IF NOT EXISTS claridad_informacion        SMALLINT,
+        ADD COLUMN IF NOT EXISTS opinion                     TEXT,
+        DROP COLUMN IF EXISTS calificacion;
+    `);
+
     // ­ƒôØ PLANILLA DE REGISTRO DE VISITANTES (SGSST-F02)
     await client.query(`
       CREATE TABLE IF NOT EXISTS registro_visitantes (

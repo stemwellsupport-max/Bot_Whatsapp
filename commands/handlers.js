@@ -11,7 +11,7 @@ const { responderConIA, detectarIdioma, consumioFalloTotal } = require('../servi
 const { detectarIntencion } = require('../services/intents');
 const agenda = require('../services/agenda');
 const identidad = require('../services/identidad');
-const { isPaused, savePendingInbound, requestAdvisor, isBusinessHours } = require('../services/human-control');
+const { isPaused, estaBloqueado, savePendingInbound, requestAdvisor, isBusinessHours } = require('../services/human-control');
 
 // Pool reusado desde postgres.js para consultas de lectura
 const { pool } = require('../services/postgres');
@@ -47,15 +47,41 @@ function pausaNatural() {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function agregarOpcionesContacto(respuesta, idioma) {
-  const texto = String(respuesta || '');
-  const normalizado = normalizarAux(texto);
-  const yaInvitaAgendar = /(agendar|agenda|book.*appointment|schedule.*appointment)/.test(normalizado);
-  const yaInvitaAsesor = /(hablar.*asesor|asesor.*contact|speak.*advisor|advisor.*contact)/.test(normalizado);
-  if (yaInvitaAgendar && yaInvitaAsesor) return texto;
-  return texto + (idioma === 'en'
-    ? '\n\nWould you like to *book an appointment* or *speak to an advisor*?'
-    : '\n\n¿Te gustaría *agendar una cita* o *hablar con un asesor*?');
+// Botones que acompañan CADA respuesta libre del bot, para que la persona
+// siempre pueda agendar, hablar con un asesor o volver al menu con un toque.
+// Los titulos coinciden con lo que ya reconoce el resto del flujo (intents.js
+// y el comando global "menu"). WhatsApp limita el titulo a 20 caracteres.
+function botonesContacto(idioma) {
+  return idioma === 'en'
+    ? ['Book appointment', 'Speak to an advisor', 'Menu']
+    : ['Agendar cita', 'Hablar con un asesor', 'Menú'];
+}
+
+// Pone los botones de contacto en la respuesta. El cuerpo de un mensaje con
+// botones admite ~1024 caracteres; si la respuesta es mas larga se envia como
+// texto y los botones van en un mensaje corto aparte.
+async function prepararRespuestaConBotones(telefono, nombre, respuesta, idioma) {
+  const botones = botonesContacto(idioma);
+  if (respuesta.length <= 900) return { texto: respuesta, botones };
+  await pausaNatural();
+  await sendMessage(telefono, respuesta);
+  await logMensaje(telefono, nombre, 'salida', respuesta);
+  return {
+    texto: idioma === 'en' ? 'What would you like to do?' : '¿Qué te gustaría hacer?',
+    botones,
+  };
+}
+
+const PALABRAS_SALUDO = new Set(['hola', 'hello', 'hi', 'hey', 'buenas', 'buenos', 'dias', 'tardes', 'noches',
+  'good', 'morning', 'afternoon', 'evening', 'que', 'tal', 'como', 'estas', 'estan', 'ok', 'okay', 'vale', 'listo']);
+
+// Un mensaje "abierto" es una consulta real escrita con libertad (no un saludo
+// ni una respuesta de una palabra). En ese caso el bot conversa en vez de
+// volver a mostrar el menu.
+function esConversacionAbierta(texto) {
+  const palabras = normalizarAux(texto).replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
+  if (palabras.length && palabras.every(p => PALABRAS_SALUDO.has(p))) return false;
+  return parecePreguntaLibre(texto) || palabras.length >= 4;
 }
 
 const DIAS_ES = ['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];
@@ -277,7 +303,7 @@ async function getDoctoresActivos() {
 function parecePreguntaLibre(texto) {
   const t = normalizarAux(texto);
   return /[?\u00bf]/.test(texto) ||
-    /\b(que|como|cual|cuales|por que|puede|pueden|sirve|sirven|ayuda|ayudar|riesgo|peligro|contraindic|cancer|dolor|rodilla|hombro|espalda|celula|stem ?cell|prp|exosoma|foto\s*biomod|laser|tratamiento|procedimiento|difference|what|how|why|can|could|danger|risk|pain|knee|shoulder|back|cancer|certif|ubicacion|ubicaciones|direccion|donde|queda|llegar|mapa|address|location|where)\b/.test(t);
+    /\b(que|como|cual|cuales|por que|puede|pueden|sirve|sirven|ayuda|ayudar|riesgo|peligro|contraindic|cancer|dolor|rodilla|hombro|espalda|celula|stem ?cell|prp|exosoma|foto\s*biomod|laser|tratamiento|procedimiento|difference|what|how|why|can|could|danger|risk|pain|knee|shoulder|back|cancer|certif|ubicacion|ubicaciones|direccion|donde|queda|llegar|mapa|address|location|where|cuanto|cuesta|vale|valor|precio|costo|cost|price|how much)\b/.test(t);
 }
 
 function esEntradaEsperada(st, texto) {
@@ -365,7 +391,8 @@ function respuestaSeguimientoCita(st, texto, idioma = 'es') {
 
 function pistaParaRetomar(st, idioma = 'es') {
   const paso = st && st.paso;
-  if (!paso || paso === 'menu_principal') return idioma === 'en' ? '\n\nI can also help you book, reschedule or cancel an appointment.' : '\n\nTambien puedo ayudarte a agendar, reagendar o cancelar una cita.';
+  // En el menu o sin flujo activo los botones fijos ya ofrecen agendar y asesor.
+  if (!paso || paso === 'menu_principal') return '';
   const en = idioma === 'en';
   const pistas = {
     pedir_tipo: en ? 'When you are ready, choose the appointment type from the previous list.' : 'Cuando quieras continuar, elige el tipo de cita de la lista anterior.',
@@ -493,6 +520,13 @@ async function handleIncomingMessage(message, contact, options = {}) {
     return;
   }
 
+  // Contacto bloqueado por Soporte: silencio total, sin respuesta, sin crear
+  // contacto y sin guardar el mensaje.
+  if (await estaBloqueado(telefono)) {
+    console.log(`BLOCKED_CONTACT_IGNORED [${telefono}] No se envio respuesta automatica`);
+    return;
+  }
+
   const sesion = await getSesion(telefono);
   // Un paciente puede cambiar de idioma durante la misma conversacion.
   // Priorizamos el idioma del mensaje actual y conservamos el anterior solo
@@ -523,6 +557,8 @@ async function handleIncomingMessage(message, contact, options = {}) {
     const textoGlobal = normalizarAux(texto);
     const intencionGlobal = detectarIntencion(texto);
     const interrumpeFlujo = !['menu_principal', 'validado', 'validado_nuevo', 'confirmar_cancelar'].includes(st.paso);
+    // Pedir agendar / ver horarios inicia el flujo de agenda, no una charla con la IA.
+    const esIntencionAgenda = ['agendar_cita', 'consultar_disponibilidad'].includes(intencionGlobal);
 
     // El paciente repite (casi) el mismo mensaje varias veces seguidas: senal
     // de que el bot no esta logrando resolverle, sin importar por que camino
@@ -531,6 +567,31 @@ async function handleIncomingMessage(message, contact, options = {}) {
     const esRepeticion = textoGlobal.length >= 4 && textoGlobal === (sesion.ultimo_msg_norm || '');
     const repeticiones = esRepeticion ? (sesion.repeticiones || 0) + 1 : 0;
     await setSesion(telefono, { ultimo_msg_norm: textoGlobal, repeticiones });
+
+    // Responde una consulta escrita con libertad: primero respuestas medicas
+    // seguras ya definidas, luego la IA con el historial de la conversacion.
+    // Deja el resultado en `respuesta` / `escalado`, como el resto del flujo.
+    const responderPreguntaLibre = async () => {
+      const pareceSeguimiento = /(call me|who.*call|office.*call|appointment|confirm|scheduled|avis|llam|quien|consultorio|agendad|reservad)/.test(textoGlobal);
+      const contexto = pareceSeguimiento ? await recuperarContextoCita(telefono, st) : st;
+      if (contexto.paso === 'post_agendado' && st.paso !== 'post_agendado') {
+        await agenda.setEstadoAgenda(telefono, contexto);
+      }
+      const seguimiento = respuestaSeguimientoCita(contexto, texto, idioma);
+      const segura = respuestaMedicaSegura(texto, idioma);
+      const consultaIA = contexto.paso === 'post_agendado' && contexto.citaConfirmada
+        ? `[The patient already has a registered appointment. Do not recommend booking again and do not send a booking link. Answer only the new question.]\n${texto}`
+        : texto;
+      const usaIA = !seguimiento && !segura;
+      respuesta = seguimiento || segura || await responderConIA(consultaIA, nombre, telefono, idioma, sendMessage);
+      if (usaIA && consumioFalloTotal(telefono)) {
+        respuesta = await escalarPorFalloBot(telefono, nombre, idioma, texto, 'ia_sin_respuesta');
+        escalado = true;
+      } else {
+        if (!seguimiento) respuesta += pistaParaRetomar(contexto, idioma);
+        if (!contexto.paso) await agenda.setEstadoAgenda(telefono, { paso: 'menu_principal' });
+      }
+    };
 
     // ═══════════════════════════════════════════════════════
     // NUEVO FLUJO GUIADO POR BOTONES
@@ -597,25 +658,7 @@ async function handleIncomingMessage(message, contact, options = {}) {
       }
     }
     else if (parecePreguntaLibre(texto) && !esEntradaEsperada(st, texto) && intencionGlobal === 'informacion') {
-      const pareceSeguimiento = /(call me|who.*call|office.*call|appointment|confirm|scheduled|avis|llam|quien|consultorio|agendad|reservad)/.test(textoGlobal);
-      const contexto = pareceSeguimiento ? await recuperarContextoCita(telefono, st) : st;
-      if (contexto.paso === 'post_agendado' && st.paso !== 'post_agendado') {
-        await agenda.setEstadoAgenda(telefono, contexto);
-      }
-      const seguimiento = respuestaSeguimientoCita(contexto, texto, idioma);
-      const segura = respuestaMedicaSegura(texto, idioma);
-      const consultaIA = contexto.paso === 'post_agendado' && contexto.citaConfirmada
-        ? `[The patient already has a registered appointment. Do not recommend booking again and do not send a booking link. Answer only the new question.]\n${texto}`
-        : texto;
-      const usaIA = !seguimiento && !segura;
-      respuesta = seguimiento || segura || await responderConIA(consultaIA, nombre, telefono, idioma, sendMessage);
-      if (usaIA && consumioFalloTotal(telefono)) {
-        respuesta = await escalarPorFalloBot(telefono, nombre, idioma, texto, 'ia_sin_respuesta');
-        escalado = true;
-      } else {
-        if (!seguimiento) respuesta += pistaParaRetomar(contexto, idioma);
-        if (!contexto.paso) await agenda.setEstadoAgenda(telefono, { paso: 'menu_principal' });
-      }
+      await responderPreguntaLibre();
     }
 
     // ── PASO: MENÚ PRINCIPAL ──
@@ -653,17 +696,24 @@ async function handleIncomingMessage(message, contact, options = {}) {
               : 'Puedes comunicarte con recepcion al *+57 310 406 8755*. Tambien puedo ayudarte a agendar por este chat.',
             botones: idioma === 'en' ? ['Book appointment', 'Menu'] : ['Agendar cita', 'Menu'],
           };
+        } else if (esConversacionAbierta(texto) && !esIntencionAgenda) {
+          // Consulta escrita con libertad: se conversa, no se repite el menu.
+          await responderPreguntaLibre();
         } else {
           botonesRespuesta = menuPrincipalStemwell(nombre, idioma);
         }
-        await agenda.setEstadoAgenda(telefono, { paso: 'menu_principal' });
+        if (!respuesta) await agenda.setEstadoAgenda(telefono, { paso: 'menu_principal' });
       }
     }
 
-    // ── PASO: SIN ESTADO (primera interacción) → menú ──
+    // ── PASO: SIN ESTADO (primera interacción) → menú, o conversación si ya escribió algo real ──
     else if (!st.paso || st.paso === 'inicio') {
-      botonesRespuesta = menuPrincipalStemwell(nombre, idioma);
-      await agenda.setEstadoAgenda(telefono, { paso: 'menu_principal' });
+      if (esConversacionAbierta(texto) && !esIntencionAgenda) {
+        await responderPreguntaLibre();
+      } else {
+        botonesRespuesta = menuPrincipalStemwell(nombre, idioma);
+        await agenda.setEstadoAgenda(telefono, { paso: 'menu_principal' });
+      }
     }
 
     // ── PASO: ELEGIR TIPO DE CITA ──
@@ -942,8 +992,10 @@ async function handleIncomingMessage(message, contact, options = {}) {
 
     // ═══ ENVÍO DE RESPUESTA (texto, botones o lista) ═══
     const pasosAgenda = ['pedir_tipo','pedir_doctor','pedir_correo','validado','validado_nuevo','seleccionar_dia','seleccionar_hora','confirmar_cancelar','post_agendado'];
-    if (respuesta && !pasosAgenda.includes(st.paso) && intencionGlobal !== 'hablar_asesor' && !escalado) {
-      respuesta = agregarOpcionesContacto(respuesta, idioma);
+    // Toda respuesta libre lleva siempre los botones: agendar, asesor y menu.
+    if (respuesta && !botonesRespuesta && !listRespuesta && !pasosAgenda.includes(st.paso) && intencionGlobal !== 'hablar_asesor' && !escalado) {
+      botonesRespuesta = await prepararRespuestaConBotones(telefono, nombre, respuesta, idioma);
+      respuesta = null;
     }
     if (botonesRespuesta && botonesRespuesta.botones && botonesRespuesta.botones.length > 0) {
       await pausaNatural();

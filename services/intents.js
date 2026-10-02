@@ -42,7 +42,10 @@ function esConsultarDisponibilidad(texto) {
 // Intención: hablar con un asesor humano
 function esHablarConAsesor(texto) {
   const t = normalizar(texto);
-  return /(asesor|persona|humano|alguien|agente|representante|hablar con|contactar.*(persona|asesor)|telefono|llamar)/.test(t) &&
+  // Solo frases que piden explicitamente a una persona. Palabras sueltas como
+  // "persona", "telefono" o "llamar" aparecen en preguntas normales ("cual es
+  // su telefono", "una persona con artrosis") y no deben escalar al asesor.
+  return /(asesor|asesora|humano|agente|representante|recepcionista|operador|persona real|hablar con (una |un |alguien|persona|el |la |los |las )|comunicar(me)? con|contactar.*(persona|asesor)|alguien (me |que |de )|me (pueden |podrian )?llam(en|ar|an)|llamenme|speak (to|with)|talk (to|with)|human|advisor|adviser|representative|real person|call me)/.test(t) &&
          !/(info|informacion|cuanto|que ofrecen)/.test(t);
 }
 

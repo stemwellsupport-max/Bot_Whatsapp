@@ -102,6 +102,32 @@ async function isPaused(telefono) {
   return Boolean(result.rows[0]?.paused);
 }
 
+// Contactos bloqueados desde el CRM (Soporte > Bloqueados): el bot no les
+// responde ni guarda su conversacion. Compara por los ultimos 10 digitos, igual
+// que el CRM. Si la consulta falla (por ejemplo el CRM aun no creo la tabla),
+// devuelve false: un fallo aqui nunca debe dejar al bot sin atender a todos.
+async function estaBloqueado(telefono) {
+  const digitos = String(telefono || '').replace(/\D/g, '');
+  if (digitos.length < 7) return false;
+  const clave = digitos.length >= 10 ? digitos.slice(-10) : digitos;
+  try {
+    const porContacto = await pool.query(
+      `SELECT 1 FROM blocked_contacts
+       WHERE activo AND telefono_digits <> '' AND block_phone_key(telefono_digits) = $1 LIMIT 1`,
+      [clave]
+    );
+    if (porContacto.rowCount) return true;
+    const porPaciente = await pool.query(
+      'SELECT 1 FROM leads WHERE bloqueado AND block_phone_key(telefono) = $1 LIMIT 1',
+      [clave]
+    );
+    return porPaciente.rowCount > 0;
+  } catch (error) {
+    console.error('[bloqueados]', error.message);
+    return false;
+  }
+}
+
 async function savePendingInbound(telefono, nombre, mensaje) {
   await pool.query(`
     INSERT INTO wa_bot_pending_inbound (telefono,nombre,mensaje,received_at,replaying_at)
@@ -204,7 +230,7 @@ async function marcarReintentoOFallo(id, intentosPrevios, mensajeError) {
 }
 
 module.exports = {
-  initHumanControl, isPaused, processOutbox,
+  initHumanControl, isPaused, estaBloqueado, processOutbox,
   savePendingInbound, claimResumedMessages, completeResumedMessage, releaseResumedMessage,
   requestAdvisor, isBusinessHours,
 };

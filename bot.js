@@ -17,6 +17,8 @@ const { enviarCorreoAdmision, enviarCorreoEncuesta, enviarCorreoAdmisionCirugias
 const { initDB } = require('./services/postgres');
 const { initDB: initAgendaDB, apiCrearLead } = require('./services/agenda');
 const adminRouter = require('./admin/router');
+const { permitirEnvio, pareceRobot } = require('./services/antiabuso');
+const { protegerModulo, iniciarSesion, cerrarSesion } = require('./services/acceso');
 const {
   initHumanControl, processOutbox, claimResumedMessages,
   completeResumedMessage, releaseResumedMessage,
@@ -46,6 +48,21 @@ process.on('uncaughtException', (err) => {
 process.on('unhandledRejection', (reason) => {
   console.error('🛡️ [unhandledRejection] Capturado (el bot continúa):', reason?.message || reason);
 });
+
+// El bot está detrás de un solo proxy (el túnel ngrok). Con esto req.ip es la IP
+// real del paciente (la que ngrok anota) y no la del túnel; se usa para limitar
+// envíos repetidos en las encuestas.
+app.set('trust proxy', 1);
+
+// ============================================
+// CONTRASEÑA DEL MÓDULO PRINCIPAL (ver services/acceso.js)
+// Todo /consentimiento/... pide clave, excepto la encuesta de satisfacción y la
+// calificación rápida, que siguen públicas para los pacientes.
+// La clave se define en MODULO_PASSWORD (archivo .env).
+// ============================================
+app.use(protegerModulo);
+app.post('/consentimiento/login', express.json(), iniciarSesion);
+app.get('/consentimiento/salir', cerrarSesion);
 
 // Middlewares
 app.use(express.json({ limit: '5mb' }));
@@ -336,8 +353,9 @@ app.post('/consentimiento/encuesta/guardar', async (req, res) => {
     const {
       idioma, fecha_registro, nombre_completo, procedimientos, procedimiento_otro,
       calificacion_personal, recomendaria, satisfaccion_general,
-      calificacion_instalaciones, claridad_informacion, comentarios_mejora, user_agent
+      calificacion_instalaciones, claridad_informacion, comentarios_mejora, opinion, user_agent
     } = req.body;
+    const en = idioma === 'en';
 
     if (!fecha_registro || !nombre_completo || !Array.isArray(procedimientos) || !procedimientos.length) {
       return res.status(400).json({ mensaje: 'Faltan campos obligatorios.' });
@@ -352,16 +370,45 @@ app.post('/consentimiento/encuesta/guardar', async (req, res) => {
       return res.status(400).json({ mensaje: 'Falta el campo de comentarios.' });
     }
 
+    // Robots: se responde "ok" sin guardar nada para que no sepan que fueron detectados.
+    if (pareceRobot(req.body, 8000)) {
+      console.warn(`🚫 Encuesta descartada (parece robot) desde ${req.ip}`);
+      return res.json({ mensaje: 'Encuesta guardada exitosamente' });
+    }
+
+    // Una sola encuesta por persona y por fecha (mismo nombre, sin importar mayúsculas).
+    const yaExiste = await pool.query(
+      `SELECT 1 FROM encuestas_satisfaccion
+       WHERE lower(trim(nombre_completo)) = lower(trim($1)) AND fecha_registro = $2 LIMIT 1`,
+      [nombre_completo, fecha_registro]
+    );
+    if (yaExiste.rowCount) {
+      return res.status(409).json({
+        mensaje: en
+          ? 'We already received a survey with this name for this date. Thank you!'
+          : 'Ya recibimos una encuesta con este nombre en esta fecha. ¡Gracias!'
+      });
+    }
+
+    if (!permitirEnvio(req.ip)) {
+      console.warn(`🚫 Encuesta bloqueada por exceso de envíos desde ${req.ip}`);
+      return res.status(429).json({
+        mensaje: en
+          ? 'Too many submissions from this connection. Please try again later.'
+          : 'Se han enviado demasiadas encuestas desde esta conexión. Inténtalo más tarde.'
+      });
+    }
+
     await pool.query(
       `INSERT INTO encuestas_satisfaccion
         (idioma, fecha_registro, nombre_completo, procedimientos, procedimiento_otro,
          calificacion_personal, recomendaria, satisfaccion_general, calificacion_instalaciones,
-         claridad_informacion, comentarios_mejora, user_agent)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+         claridad_informacion, comentarios_mejora, opinion, user_agent)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
       [
         idioma === 'en' ? 'en' : 'es', fecha_registro, nombre_completo, procedimientos.join(','), procedimiento_otro || '',
         calificacion_personal, recomendaria, satisfaccion_general, calificacion_instalaciones,
-        claridad_informacion, comentarios_mejora.trim(), user_agent || ''
+        claridad_informacion, comentarios_mejora.trim(), (opinion || '').trim(), user_agent || ''
       ]
     );
 
@@ -370,7 +417,7 @@ app.post('/consentimiento/encuesta/guardar', async (req, res) => {
     enviarCorreoEncuesta({
       idioma, fecha_registro, nombre_completo, procedimientos, procedimiento_otro,
       calificacion_personal, recomendaria, satisfaccion_general,
-      calificacion_instalaciones, claridad_informacion, comentarios_mejora,
+      calificacion_instalaciones, claridad_informacion, comentarios_mejora, opinion,
     })
       .then((destinatarios) => console.log(`✅ Correo de encuesta enviado a: ${destinatarios.join(', ')}`))
       .catch((err) => console.error('❌ Error enviando correo de encuesta:', err));
@@ -379,6 +426,78 @@ app.post('/consentimiento/encuesta/guardar', async (req, res) => {
 
   } catch (err) {
     console.error('❌ Error guardando encuesta:', err);
+    res.status(500).json({ mensaje: 'Error interno del servidor', error: err.message });
+  } finally {
+    await pool.end();
+  }
+});
+
+// ============================================
+// RUTA: GUARDAR CALIFICACIÓN RÁPIDA (link /consentimiento/calificacion/)
+// Mismas 5 calificaciones de la encuesta + opinión libre (opcional). No pide
+// ni guarda nombre, fecha ni procedimiento, y va a su propia tabla para no
+// mezclarse con la encuesta de satisfacción completa.
+// ============================================
+app.post('/consentimiento/calificacion/guardar', async (req, res) => {
+  const pool = new Pool({
+    host: process.env.PG_HOST || 'localhost',
+    port: parseInt(process.env.PG_PORT || '5432'),
+    database: process.env.PG_DATABASE || 'stemwell',
+    user: process.env.PG_USER || 'crm_user',
+    password: process.env.PG_PASSWORD || 'crm2024',
+  });
+
+  try {
+    const {
+      idioma, calificacion_personal, recomendaria, satisfaccion_general,
+      calificacion_instalaciones, claridad_informacion, opinion, user_agent
+    } = req.body;
+
+    // Máximo de cada escala: personal, recomendaría y satisfacción van de 1 a 4;
+    // instalaciones y claridad de 1 a 5 (igual que la encuesta completa).
+    const escalas = [
+      ['calificacion_personal', calificacion_personal, 4],
+      ['recomendaria', recomendaria, 4],
+      ['satisfaccion_general', satisfaccion_general, 4],
+      ['calificacion_instalaciones', calificacion_instalaciones, 5],
+      ['claridad_informacion', claridad_informacion, 5],
+    ];
+    for (const [campo, valor, max] of escalas) {
+      if (!Number.isInteger(valor) || valor < 1 || valor > max) {
+        return res.status(400).json({ mensaje: `Falta responder: ${campo}` });
+      }
+    }
+
+    if (pareceRobot(req.body, 4000)) {
+      console.warn(`🚫 Calificación descartada (parece robot) desde ${req.ip}`);
+      return res.json({ mensaje: 'Calificación guardada exitosamente' });
+    }
+
+    if (!permitirEnvio(req.ip)) {
+      console.warn(`🚫 Calificación bloqueada por exceso de envíos desde ${req.ip}`);
+      return res.status(429).json({
+        mensaje: idioma === 'en'
+          ? 'Too many submissions from this connection. Please try again later.'
+          : 'Se han enviado demasiadas calificaciones desde esta conexión. Inténtalo más tarde.'
+      });
+    }
+
+    await pool.query(
+      `INSERT INTO calificaciones_rapidas
+        (idioma, calificacion_personal, recomendaria, satisfaccion_general,
+         calificacion_instalaciones, claridad_informacion, opinion, user_agent)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [
+        idioma === 'en' ? 'en' : 'es', calificacion_personal, recomendaria, satisfaccion_general,
+        calificacion_instalaciones, claridad_informacion, (opinion || '').trim(), user_agent || ''
+      ]
+    );
+
+    console.log(`✅ Calificación rápida guardada (${idioma})`);
+    res.json({ mensaje: 'Calificación guardada exitosamente' });
+
+  } catch (err) {
+    console.error('❌ Error guardando calificación rápida:', err);
     res.status(500).json({ mensaje: 'Error interno del servidor', error: err.message });
   } finally {
     await pool.end();
@@ -488,6 +607,74 @@ app.get('/consentimiento/registro/pendientes/lista', async (req, res) => {
   } catch (err) {
     console.error('❌ Error obteniendo pendientes de salida:', err);
     res.status(500).json({ mensaje: 'Error interno del servidor' });
+  } finally {
+    await pool.end();
+  }
+});
+
+// ============================================
+// RUTAS: PLANILLA DE REGISTRO DIARIA (para consultar, no para llenar)
+// /consentimiento/registro/planilla/            -> página (public/.../planilla/index.html)
+// /consentimiento/registro/planilla/datos       -> visitantes de un día (?fecha=YYYY-MM-DD)
+// /consentimiento/registro/planilla/firma/:id   -> imagen de la firma de un visitante
+// Quedan detrás de la contraseña del módulo (services/acceso.js).
+// ============================================
+app.get('/consentimiento/registro/planilla/datos', async (req, res) => {
+  const fecha = String(req.query.fecha || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+    return res.status(400).json({ mensaje: 'La fecha debe tener el formato AAAA-MM-DD.' });
+  }
+  const pool = new Pool({
+    host: process.env.PG_HOST || 'localhost',
+    port: parseInt(process.env.PG_PORT || '5432'),
+    database: process.env.PG_DATABASE || 'stemwell',
+    user: process.env.PG_USER || 'crm_user',
+    password: process.env.PG_PASSWORD || 'crm2024',
+  });
+
+  try {
+    // La firma no viaja aquí (pesa ~35 KB por visitante): solo se avisa si existe
+    // y la página la pide aparte por /firma/:id.
+    const r = await pool.query(
+      `SELECT id, nombre, documento, rh, motivo_visita, eps, contacto_emergencia, telefono,
+              hora_ingreso, hora_salida, (COALESCE(firma_img, '') <> '') AS tiene_firma
+       FROM registro_visitantes
+       WHERE fecha = $1
+       ORDER BY NULLIF(hora_ingreso, '') ASC NULLS LAST, id ASC`,
+      [fecha]
+    );
+    res.set('Cache-Control', 'no-store');
+    res.json({ fecha, visitantes: r.rows });
+  } catch (err) {
+    console.error('❌ Error obteniendo la planilla diaria:', err);
+    res.status(500).json({ mensaje: 'Error interno del servidor' });
+  } finally {
+    await pool.end();
+  }
+});
+
+app.get('/consentimiento/registro/planilla/firma/:id', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).end();
+  const pool = new Pool({
+    host: process.env.PG_HOST || 'localhost',
+    port: parseInt(process.env.PG_PORT || '5432'),
+    database: process.env.PG_DATABASE || 'stemwell',
+    user: process.env.PG_USER || 'crm_user',
+    password: process.env.PG_PASSWORD || 'crm2024',
+  });
+
+  try {
+    const r = await pool.query(`SELECT firma_img FROM registro_visitantes WHERE id = $1`, [id]);
+    const dataUrl = r.rows[0] && r.rows[0].firma_img;
+    const m = /^data:image\/(png|jpeg);base64,(.+)$/.exec(dataUrl || '');
+    if (!m) return res.status(404).end();
+    res.set('Content-Type', `image/${m[1]}`);
+    res.set('Cache-Control', 'private, max-age=300');
+    res.send(Buffer.from(m[2], 'base64'));
+  } catch (err) {
+    console.error('❌ Error obteniendo la firma del visitante:', err);
+    res.status(500).end();
   } finally {
     await pool.end();
   }
@@ -626,20 +813,29 @@ app.post('/consentimiento/paciente-nuevo/guardar', async (req, res) => {
       return res.status(400).json({ mensaje: 'Faltan campos obligatorios.' });
     }
 
+    // Todo paciente que se registra aquí debe llegar al CRM como Walk-in, ya
+    // con asesor, pipeline y origen del consentimiento (firma del formulario).
+    // Si el canal original del lead ya existía (p. ej. Meta) se conserva.
     let leadId = null;
-    try {
-      leadId = await apiCrearLead({
-        nombre: nombre.trim(),
-        telefono: telefono.trim(),
-        email: (correo || '').trim(),
-        canal: 'Walk-in',
-        notas: (informacion || '').trim(),
-      });
-    } catch (leadErr) {
-      // No bloquear el registro si falla la creación del lead en el CRM —
-      // el formato en sí queda guardado igual y se puede vincular a mano.
-      console.error('⚠️ No se pudo crear/actualizar el lead en el CRM:', leadErr.message);
+    const datosLead = {
+      nombre: nombre.trim(),
+      telefono: telefono.trim(),
+      email: (correo || '').trim(),
+      canal: 'Walk-in',
+      notas: (informacion || '').trim(),
+      idioma: idioma === 'en' ? 'en' : 'es',
+      consentimientoFuente: 'walkin_formulario_firmado',
+    };
+    for (let intento = 1; intento <= 2 && !leadId; intento++) {
+      try {
+        leadId = await apiCrearLead(datosLead);
+      } catch (leadErr) {
+        console.error(`⚠️ No se pudo crear/actualizar el lead en el CRM (intento ${intento}/2):`, leadErr.message);
+        if (intento < 2) await new Promise(r => setTimeout(r, 800));
+      }
     }
+    // Si sigue sin lead NO se bloquea el registro: el formato queda guardado
+    // (lead_id vacío) y se puede vincular a mano.
 
     await pool.query(
       `INSERT INTO registro_pacientes_nuevos

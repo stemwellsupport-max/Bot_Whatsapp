@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Acceso · Stemwell</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --verde: #00B2C2; --verde-claro: #E6F7F9; --texto: #1C2B26; --gris: #6B7B76; --borde: #D4E6DF; --fondo: #F7FAF8; --blanco: #FFFFFF; --error: #C0392B; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Poppins', sans-serif; background: var(--fondo); color: var(--texto); min-height: 100vh; }
+  .header { background: var(--blanco); border-bottom: 1px solid var(--borde); padding: 10px 24px; display: flex; align-items: center; }
+  .header img { height: 54px; width: auto; }
+  .container { max-width: 420px; margin: 0 auto; padding: 48px 20px 24px; }
+  .tarjeta { background: var(--blanco); border: 1px solid var(--borde); border-radius: 18px; padding: 32px 24px; text-align: center; }
+  .candado { width: 64px; height: 64px; background: var(--verde-claro); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 18px; }
+  .candado svg { width: 30px; height: 30px; }
+  h1 { font-size: 22px; font-weight: 700; color: var(--verde); margin-bottom: 8px; }
+  p.intro { font-size: 14px; color: var(--gris); line-height: 1.5; margin-bottom: 22px; }
+  input[type="password"] {
+    width: 100%; padding: 14px 15px; border: 1.5px solid var(--borde); border-radius: 11px; text-align: center;
+    font-family: 'Poppins', sans-serif; font-size: 17px; color: var(--texto); background: var(--fondo); letter-spacing: 2px;
+    transition: border-color .2s, box-shadow .2s; -webkit-appearance: none;
+  }
+  input:focus { outline: none; border-color: var(--verde); box-shadow: 0 0 0 3px rgba(0,178,194,.12); background: var(--blanco); }
+  input.error { border-color: var(--error); }
+  .mensaje { min-height: 20px; font-size: 13px; color: var(--error); margin: 10px 0 8px; }
+  button {
+    width: 100%; padding: 15px; background: var(--verde); color: white; border: none; border-radius: 14px;
+    font-family: 'Poppins', sans-serif; font-size: 16px; font-weight: 600; cursor: pointer; transition: all .2s;
+  }
+  button:hover:not(:disabled) { background: #0093a0; box-shadow: 0 6px 20px rgba(0,178,194,.3); }
+  button:disabled { opacity: .6; cursor: not-allowed; }
+</style>
+</head>
+<body>
+<header class="header"><img src="/images/STEMWELL_LOGO_.png" alt="Stemwell" /></header>
+<div class="container">
+  <form class="tarjeta" id="form" autocomplete="off">
+    <div class="candado">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#00B2C2" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+    </div>
+    <h1>Acceso restringido</h1>
+    <p class="intro">Este módulo es de uso interno de Stemwell. Ingresa la contraseña para continuar.</p>
+    <input type="password" id="clave" placeholder="Contraseña" autocomplete="current-password" autofocus />
+    <div class="mensaje" id="mensaje" role="alert"></div>
+    <button type="submit" id="btn">Entrar</button>
+  </form>
+</div>
+<script>
+(function () {
+  'use strict';
+  var params = new URLSearchParams(window.location.search);
+  var next = params.get('next') || '/consentimiento/';
+  var form = document.getElementById('form');
+  var campo = document.getElementById('clave');
+  var mensaje = document.getElementById('mensaje');
+  var btn = document.getElementById('btn');
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (!campo.value) { mensaje.textContent = 'Escribe la contraseña.'; campo.classList.add('error'); return; }
+    btn.disabled = true; btn.textContent = 'Verificando…'; mensaje.textContent = ''; campo.classList.remove('error');
+    fetch('/consentimiento/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clave: campo.value, next: next })
+    }).then(function (res) {
+      return res.json().then(function (d) { return { ok: res.ok, d: d }; });
+    }).then(function (r) {
+      if (r.ok) { window.location.replace(r.d.destino || '/consentimiento/'); return; }
+      mensaje.textContent = r.d.mensaje || 'No se pudo verificar la contraseña.';
+      campo.classList.add('error'); campo.value = ''; campo.focus();
+    }).catch(function () {
+      mensaje.textContent = 'No hay conexión con el servidor. Inténtalo de nuevo.';
+    }).finally(function () {
+      btn.disabled = false; btn.textContent = 'Entrar';
+    });
+  });
+})();
+</script>
+</body>
+</html>
