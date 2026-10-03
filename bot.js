@@ -1159,6 +1159,30 @@ app.get('/webhook', (req, res) => {
   res.sendStatus(403);
 });
 
+// One shared pool for the receipts: Meta sends several per message, so opening a pool each time would be wasteful.
+let statusPool = null;
+async function recordMessageStatus(status) {
+  if (!status || !status.id || !status.status) return;
+  if (!statusPool) {
+    statusPool = new Pool({
+      host: process.env.PG_HOST || 'localhost',
+      port: parseInt(process.env.PG_PORT || '5432'),
+      database: process.env.PG_DATABASE || 'stemwell',
+      user: process.env.PG_USER || 'crm_user',
+      password: process.env.PG_PASSWORD || 'crm2024',
+      max: 2,
+    });
+  }
+  const error = (status.errors || [])[0] || {};
+  const at = Number(status.timestamp) > 0 ? new Date(Number(status.timestamp) * 1000) : new Date();
+  await statusPool.query(
+    `INSERT INTO wa_message_statuses (wa_message_id, status, status_at, error_code, error_title)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (wa_message_id, status) DO NOTHING`,
+    [status.id, status.status, at, error.code || null, (error.title || error.message || null)],
+  );
+}
+
 app.post('/webhook', (req, res) => {
   const body = req.body;
 
@@ -1167,6 +1191,12 @@ app.post('/webhook', (req, res) => {
       for (const change of entry.changes || []) {
         const value = change.value || {};
         const contacts = value.contacts || [];
+        // Delivery receipts (sent / delivered / read / failed) for campaign analytics.
+        for (const status of value.statuses || []) {
+          recordMessageStatus(status).catch((err) => {
+            console.error('WHATSAPP_STATUS_ERROR', err?.message || err);
+          });
+        }
         for (const message of value.messages || []) {
           if (isDuplicateMessage(message.id)) {
             console.log(`WHATSAPP_DUPLICATE_IGNORED ${message.id}`);
