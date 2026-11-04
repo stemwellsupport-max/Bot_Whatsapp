@@ -1531,6 +1531,12 @@ async function agendaReal(st, fecha, hora, nombre, telefono, idioma = 'es') {
     return { ok: true, message: confirmacionCita(lead.nombre || nombre, fecha, hora, st.tipoConsulta, idioma) };
   } catch (e) {
     console.error('❌ agendaReal:', e.message);
+    if (e.status === 409 && /proceso activo/i.test(e.detalle || '')) {
+      return { ok: false, message: (idioma === 'en' ? 'You have a treatment in progress, so reception coordinates your appointments: ' : 'Tienes un proceso activo con nosotros, asi que tu cita la coordina recepcion: ') + TXT_RECEPCION + '.' };
+    }
+    if (e.status === 409) {
+      return { ok: false, message: idioma === 'en' ? 'That time was just taken. Please choose another one from the list.' : 'Ese horario se acaba de ocupar. Elige otro de la lista, por favor.' };
+    }
     return { ok: false, message: 'Tuvimos un problema al registrar tu cita. 🙏 Agenda aquí: ' + AGENDA_URL };
   }
 }

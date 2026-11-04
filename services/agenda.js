@@ -749,117 +749,30 @@ async function actualizarLeadEstado({ leadId, doctorId, fecha, estado, tipoConsu
   );
 }
 
-async function apiAgendar({ leadId, estado, fecha, hora, doctorId, tipoConsulta, notas, email }) {
-  try {
-    const leadResult = await pool.query(
-      `SELECT id, nombre, telefono, email, medilink_numero, tipo_consulta, program_to_which_belong_it_is, doctor_id
-       FROM leads
-       WHERE id = $1`,
-      [leadId]
-    );
-    if (!leadResult.rows.length) throw new Error('Lead no encontrado: ' + leadId);
-
-    const lead = leadResult.rows[0];
-    const fechaStr = fechaParaBD(fecha);
-    const horaStr = horaParaBD(hora);
-    const tipoFinal = tipoConsulta || lead.tipo_consulta || 'Consulta gratuita';
-    const doctorFinal = doctorId || lead.doctor_id || null;
-    const doctorNombre = doctorFinal
-      ? (await pool.query('SELECT nombre FROM usuarios WHERE id = $1', [doctorFinal]).catch(() => ({ rows: [] }))).rows[0]?.nombre || ''
-      : '';
-
-    if (estado === 'Canceled') {
-      const cancelled = await pool.query(
-        `WITH target AS (
-           SELECT id
-           FROM citas
-           WHERE lead_id = $1
-           ORDER BY fecha_cita DESC, hora_inicio DESC, id DESC
-           LIMIT 1
-         )
-         UPDATE citas
-         SET estado_cita = 'Anulado',
-             status_changed_at = NOW(),
-             updated_at = NOW()
-         WHERE id IN (SELECT id FROM target)
-         RETURNING id`,
-        [leadId]
-      );
-      await actualizarLeadEstado({ leadId, doctorId: doctorFinal, fecha, estado });
-      console.log('✅ [apiAgendar] Cita cancelada para lead:', leadId);
-      return cancelled.rows[0] || null;
-    }
-
-    const prev = await pool.query(
-      `SELECT id, appointment_root_id
-       FROM citas
-       WHERE lead_id = $1
-       ORDER BY fecha_cita DESC, hora_inicio DESC, id DESC
-       LIMIT 1`,
-      [leadId]
-    );
-    const prevId = prev.rows[0]?.id || null;
-    const rootId = prev.rows[0]?.appointment_root_id || prevId || null;
-
-    const inserted = await pool.query(
-      `INSERT INTO citas (
-         lead_id, estado_cita, fecha_cita, hora_inicio, comentario_cita,
-         nro_paciente, nombre_paciente, tipo_atencion, nombre_profesional,
-         origen, agendado_por, fecha_creacion_cita, program_to_which_belong_it_is,
-         consulta_medilink, consulta_pagada, appointment_kind,
-         rescheduled_from_cita_id, appointment_root_id, appointment_attempt_number, status_changed_at
-       ) VALUES (
-         $1, $2, $3::date, $4::time, $5,
-         $6, $7, $8, $9,
-         'bot', 'WhatsApp Bot', NOW(), $10,
-         $11, $12, $13,
-         $14, $15, 1, NOW()
-       )
-       RETURNING id`,
-      [
-        leadId,
-        'Agendado',
-        fechaStr,
-        horaStr,
-        notas || '',
-        lead.medilink_numero || '',
-        lead.nombre || '',
-        tipoFinal,
-        doctorNombre,
-        lead.program_to_which_belong_it_is || '',
-        tipoFinal,
-        tipoFinal === 'Consulta medicina general',
-        String(tipoFinal).toLowerCase().includes('consultoria') ? 'consulting' : 'consultation',
-        estado === 'Rescheduled' ? prevId : null,
-        rootId,
-      ]
-    );
-
-    if (prevId && estado === 'Rescheduled') {
-      await pool.query(
-        `UPDATE citas
-         SET estado_cita = 'Reagendado',
-             status_changed_at = NOW(),
-             updated_at = NOW()
-         WHERE id = $1`,
-        [prevId]
-      );
-    }
-
-    await pool.query(
-      `UPDATE citas
-       SET appointment_root_id = COALESCE($1, id)
-       WHERE id = $2`,
-      [rootId || inserted.rows[0].id, inserted.rows[0].id]
-    );
-
-    await actualizarLeadEstado({ leadId, doctorId: doctorFinal, fecha, estado, tipoConsulta: tipoFinal });
-    console.log('✅ [apiAgendar] Cita', estado, 'para lead:', leadId, fechaStr, horaStr);
-    return inserted.rows[0];
-  } catch (e) {
-    console.error('❌ [apiAgendar] Error:', e.message);
+// Agendar / reagendar / cancelar una consulta: se hace SIEMPRE en el CRM (puerta interna), que aplica las mismas
+// reglas que recepcion en una sola transaccion. El bot ya no escribe citas con su propio SQL.
+// Si el CRM rechaza (horario ocupado, proceso activo...) se lanza un Error con .status y .detalle.
+async function apiAgendar({ leadId, estado, fecha, hora, doctorId, tipoConsulta }) {
+  const crm = require('./crm-interno');
+  let r;
+  if (estado === 'Canceled') {
+    r = await crm.cancelarConsulta({ leadId });
+  } else {
+    const tipo = String(tipoConsulta || '').toLowerCase();
+    r = await crm.agendarConsulta({
+      leadId, fecha: fechaParaBD(fecha), hora: horaParaBD(hora).slice(0, 5), doctorId,
+      modalidad: tipo.includes('virtual') ? 'Virtual' : 'Presencial',
+      reagenda: estado === 'Rescheduled',
+    });
+  }
+  if (!r.ok) {
+    const e = new Error('CRM ' + r.status + ': ' + r.detail);
+    e.status = r.status; e.detalle = r.detail;
+    console.error('❌ [apiAgendar]', e.message);
     throw e;
   }
+  console.log('✅ [apiAgendar]', estado, 'lead', leadId, JSON.stringify(r.data));
+  return r.data;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

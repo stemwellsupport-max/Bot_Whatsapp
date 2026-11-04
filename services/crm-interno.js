@@ -37,4 +37,10 @@ const agendarSesion = ({ leadId, paqueteId, fecha, hora, componente }) =>
 const solicitudSesiones = ({ leadId, servicio, bono, detalle }) =>
   llamar('post', '/bot-interno/solicitudes', { data: { lead_id: leadId, servicio, bono, detalle: detalle || '' } });
 
-module.exports = { sesionesPorAgendar, horariosLibres, agendarSesion, solicitudSesiones };
+// Consultas medicas: agendar/reagendar y cancelar con las mismas reglas de recepcion (una sola transaccion en el CRM)
+const agendarConsulta = ({ leadId, fecha, hora, doctorId, modalidad, reagenda }) =>
+  llamar('post', '/bot-interno/consultas/agendar', { data: { lead_id: leadId, fecha, hora, doctor_id: doctorId || null, modalidad: modalidad || null, reagenda: !!reagenda } });
+const cancelarConsulta = ({ leadId }) =>
+  llamar('post', '/bot-interno/consultas/cancelar', { data: { lead_id: leadId } });
+
+module.exports = { sesionesPorAgendar, horariosLibres, agendarSesion, solicitudSesiones, agendarConsulta, cancelarConsulta };
