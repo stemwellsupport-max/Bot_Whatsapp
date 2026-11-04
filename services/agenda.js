@@ -5,7 +5,7 @@ const pool = new Pool({
   port:     parseInt(process.env.PG_PORT) || 5432,
   database: process.env.PG_DATABASE || 'stemwell',
   user:     process.env.PG_USER     || 'crm_user',
-  password: process.env.PG_PASSWORD || 'crm2024',
+  password: process.env.PG_PASSWORD,
   ssl:      false,
   max: 10,
   idleTimeoutMillis:    30000,
@@ -741,7 +741,6 @@ async function actualizarLeadEstado({ leadId, doctorId, fecha, estado, tipoConsu
      SET sales_status = $1,
          appointment_status = $2,
          medical_status = $3,
-         cita_confirmada = FALSE,
          doctor_id = COALESCE($4, doctor_id),
          treatment_date = COALESCE($5::date, treatment_date),
          fecha_actualizacion = CURRENT_TIMESTAMP
