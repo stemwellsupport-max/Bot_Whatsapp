@@ -343,6 +343,32 @@ const BONOS = {
   ],
 };
 
+// La camara (y los combos, que la incluyen) exigen valoracion previa con el medico. Sesion individual: se cobra la
+// consulta presencial ($80.000) ademas de la sesion. Bonos y combos: la valoracion NO se cobra.
+const PRECIO_CONSULTA = 80000;
+function plata(n) { return '$' + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
+function infoValoracion(bono, servicioNombre, idioma) {
+  const en = idioma === 'en';
+  const individual = /^Sesion individual/.test(bono.titulo);
+  if (individual) {
+    const m = /\$([\d.]+)/.exec(bono.desc);
+    const sesion = m ? parseInt(m[1].replace(/\./g, ''), 10) : 0;
+    const total = sesion + PRECIO_CONSULTA;
+    return {
+      texto: en
+        ? `It requires a prior assessment with the doctor. Cost: single session ${plata(sesion)} + in-person consultation ${plata(PRECIO_CONSULTA)} = ${plata(total)}.`
+        : `Requiere valoracion previa con el medico. Costo: sesion individual ${plata(sesion)} + consulta presencial ${plata(PRECIO_CONSULTA)} = ${plata(total)}.`,
+      detalle: `Valoracion presencial ${plata(PRECIO_CONSULTA)} + sesion individual ${plata(sesion)} = ${plata(total)} (la consulta SI se cobra).`,
+    };
+  }
+  return {
+    texto: en
+      ? 'It requires a prior assessment with the doctor, which has NO cost: it is included with your pack.'
+      : 'Requiere valoracion previa con el medico, que NO tiene costo: va incluida con tu paquete.',
+    detalle: 'Valoracion sin costo: va incluida con el paquete (NO cobrar la consulta).',
+  };
+}
+
 function fechaISO(d) {
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
@@ -1183,6 +1209,22 @@ async function handleIncomingMessage(message, contact, options = {}) {
         } else {
           const nb = /Bono (\d+)/.exec(bono.titulo);
           const nSesiones = nb ? parseInt(nb[1], 10) : (st.servicioClave === 'paquetes' ? null : 1);
+          // Camara y combos: la valoracion es obligatoria, asi que se AGENDA la valoracion (con el Dr. Gustavo Castro)
+          // y lo que le interesa queda en los comentarios de la ficha. Rehab/recuperacion/presoterapia siguen como solicitud.
+          const exigeValoracion = st.servicioClave === 'camara' || st.servicioClave === 'paquetes';
+          const doctoresV = exigeValoracion ? await getDoctoresActivos().catch(() => []) : [];
+          const gustavo = doctoresV.find(d => normalizarAux(d.nombre).includes(MEDICO_VALORACION));
+          if (exigeValoracion && gustavo) {
+            const servNombre = SERVICIO_NOMBRE[st.servicioClave] || st.servicioClave;
+            const info = infoValoracion(bono, servNombre, idioma);
+            await agenda.setEstadoAgenda(telefono, {
+              ...empezarValoracion(st), paso: 'seleccionar_dia',
+              tipoConsulta: 'Consulta presencial - $80.000 COP', doctorId: gustavo.id, doctorNombre: gustavo.nombre,
+              interes: { servicio: servNombre, bono: bono.titulo + ' · ' + bono.desc, texto: info.texto, detalle: info.detalle },
+            });
+            listRespuesta = listaDiasSesion(idioma, (idioma === 'en' ? `Great: ${bono.titulo}. ` : `Perfecto: ${bono.titulo}. `) + info.texto
+              + (idioma === 'en' ? `\n\nYour assessment will be with ${gustavo.nombre}. Which day would you like?` : `\n\nTu valoracion sera con ${gustavo.nombre}. Para que dia te gustaria agendarla?`));
+          } else {
           await agenda.setEstadoAgenda(telefono, { ...st, paso: 'solicitud_dia', bono, nSesiones, prefs: [] });
           const valoracion = st.servicioClave === 'camara' || st.servicioClave === 'paquetes'
             ? (idioma === 'en' ? '\n\nThe hyperbaric chamber requires a prior assessment; reception will arrange it if you do not have one yet.' : '\n\nLa camara hiperbarica requiere valoracion previa; recepcion la coordina contigo si aun no la tienes.')
@@ -1190,6 +1232,7 @@ async function handleIncomingMessage(message, contact, options = {}) {
           listRespuesta = listaDiasSesion(idioma, (idioma === 'en'
             ? `Great: ${bono.titulo}. Choose a day that works for you.`
             : `Perfecto: ${bono.titulo}. Elige un dia que te sirva.`) + valoracion);
+          }
         }
       }
     }
@@ -1418,6 +1461,7 @@ async function handleIncomingMessage(message, contact, options = {}) {
             });
           }
           respuesta = agendado.message;
+          if (agendado.ok && st.interes) respuesta += '\n\n' + st.interes.texto;
           if (agendado.ok && st.valoracion) respuesta += idioma === 'en' ? '\n\nAfter your assessment, reception will help you with your pack and booking the chamber sessions.' : '\n\nDespues de tu valoracion, recepcion te ayuda con tu bono y a agendar las sesiones de camara.';
         } else {
           // Lead nuevo que se validó con correo
@@ -1546,6 +1590,13 @@ async function agendaReal(st, fecha, hora, nombre, telefono, idioma = 'es') {
       tipoConsulta: st.tipoConsulta || 'Consulta presencial - $80.000 COP',
       notas: 'Cita ' + (st.esReagenda ? 'REAGENDADA' : 'AGENDADA') + ' por bot de WhatsApp - actualizar en Medilink.',
     });
+    if (st.interes) {   // la cita ya existe; esto solo deja el interes en los comentarios y avisa a la asesora
+      const dia = new Date(fecha).toISOString().slice(0, 10);
+      await crmInterno.solicitudSesiones({
+        leadId: lead.id, servicio: st.interes.servicio, bono: st.interes.bono,
+        valoracion: `Valoracion agendada el ${dia} ${hora} con ${st.doctorNombre || 'el medico'}. ${st.interes.detalle}`,
+      }).catch(err => console.error('❌ interes:', err.message));
+    }
     return { ok: true, message: confirmacionCita(lead.nombre || nombre, fecha, hora, st.tipoConsulta, idioma) };
   } catch (e) {
     console.error('❌ agendaReal:', e.message);
