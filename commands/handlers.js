@@ -260,7 +260,7 @@ function listaTiposConsulta(idioma = 'es') {
 
 function infoServicio(clave, idioma = 'es') {
   const en = idioma === 'en';
-  const pie = en ? '\n\nPrices in COP. Packages are personal and non-transferable, valid for the period shown. To book, reception will arrange the day and time with you: +57 310 406 8755.' : '\n\nPrecios en COP. Los paquetes son personales e intransferibles, con la vigencia indicada. Para agendar, recepcion coordina contigo el dia y la hora: +57 310 406 8755.';
+  const pie = en ? '\n\nPrices in COP. Packs are personal and non-transferable, valid for the period shown.\n\nAlready have your pack? Tap *Book session*. Do not have it yet? Reception will help you get it: +57 310 406 8755.' : '\n\nPrecios en COP. Los paquetes son personales e intransferibles, con la vigencia indicada.\n\nYa tienes tu bono? Toca *Agendar sesion*. Aun no lo tienes? Recepcion te ayuda a comprarlo: +57 310 406 8755.';
   const t = {
     rehab: en
       ? '*Rehabilitation at Stemwell*\nWith a physiotherapist, 1 or 2 times a week.\n- Single session: $140,000\n- 5-session pack: $675,000 ($135,000 each), valid 30 days\n- 10-session pack: $1,300,000 ($130,000 each), valid 45 days'
@@ -694,6 +694,7 @@ async function handleIncomingMessage(message, contact, options = {}) {
     let respuesta = null;        // texto simple
     let botonesRespuesta = null; // {botones:[], texto}
     let listRespuesta = null;    // {texto, buttonLabel, sections}
+    let sinBotonesLibres = false; // true cuando el bot pide un dato dentro de un flujo: no se le pegan los botones generales
     let escalado = false;        // true si ya se escalo a un asesor (evita el CTA redundante de abajo)
     const textoGlobal = normalizarAux(texto);
     const intencionGlobal = detectarIntencion(texto);
@@ -814,7 +815,8 @@ async function handleIncomingMessage(message, contact, options = {}) {
           if (r.lista) listRespuesta = r.lista; else botonesRespuesta = { texto: r.texto, botones: r.botones };
         } else {
           await agenda.setEstadoAgenda(telefono, { ...st, paso: 'pedir_correo', accion: 'sesion' });
-          respuesta = idioma === 'en' ? 'To find your pack, please enter your email.' : pedirEmailIdentidad();
+          respuesta = idioma === 'en' ? 'To find your pack, type the email you registered with.' : 'Para encontrar tu paquete, escribe el correo con el que te registraste.\n\n(Ej: nombre@correo.com)';
+          sinBotonesLibres = true;
         }
       } else if (texto.includes('📅 Agendar') || intencionGlobal === 'agendar_cita') {
         await agenda.setEstadoAgenda(telefono, { paso: 'pedir_servicio', accion: 'agendar' });
@@ -1240,7 +1242,7 @@ async function handleIncomingMessage(message, contact, options = {}) {
     // ═══ ENVÍO DE RESPUESTA (texto, botones o lista) ═══
     const pasosAgenda = ['sesion_paquete','sesion_dia','sesion_hora','pedir_servicio','pedir_tipo','pedir_doctor','pedir_correo','validado','validado_nuevo','seleccionar_dia','seleccionar_hora','confirmar_cancelar','post_agendado'];
     // Toda respuesta libre lleva siempre los botones: agendar, asesor y menu.
-    if (respuesta && !botonesRespuesta && !listRespuesta && !pasosAgenda.includes(st.paso) && intencionGlobal !== 'hablar_asesor' && !escalado) {
+    if (respuesta && !botonesRespuesta && !listRespuesta && !pasosAgenda.includes(st.paso) && !sinBotonesLibres && intencionGlobal !== 'hablar_asesor' && !escalado) {
       botonesRespuesta = await prepararRespuestaConBotones(telefono, nombre, respuesta, idioma);
       respuesta = null;
     }
