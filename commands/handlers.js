@@ -235,8 +235,11 @@ function listaServicios(idioma = 'es') {
     buttonLabel: en ? 'Choose service' : 'Elegir servicio',
     sections: [{ title: en ? 'Services' : 'Servicios', rows: [
       { id: 'srv_consulta', title: en ? 'Medical consultation' : 'Consulta medica', description: en ? 'Virtual or in-person' : 'Virtual o presencial' },
-      { id: 'srv_fisio', title: en ? 'Physiotherapy' : 'Fisioterapia', description: en ? 'Rehabilitation and physical therapy' : 'Rehabilitacion y terapia fisica' },
-      { id: 'srv_camara', title: en ? 'Hyperbaric chamber' : 'Camara hiperbarica', description: en ? 'Hyperbaric oxygen sessions' : 'Sesiones de oxigenacion hiperbarica' },
+      { id: 'srv_rehab', title: en ? 'Rehabilitation' : 'Rehabilitacion', description: en ? 'With a physiotherapist' : 'Con fisioterapeuta' },
+      { id: 'srv_recuperacion', title: en ? 'Muscle recovery' : 'Recuperacion muscular', description: en ? 'Pressotherapy + percussion + massage' : 'Presoterapia + vibropercusion + masaje' },
+      { id: 'srv_presoterapia', title: en ? 'Pressotherapy' : 'Presoterapia', description: en ? '45-minute session' : 'Sesion de 45 minutos' },
+      { id: 'srv_camara', title: en ? 'Hyperbaric chamber' : 'Camara hiperbarica', description: en ? 'Prior assessment required' : 'Requiere valoracion previa' },
+      { id: 'srv_paquetes', title: en ? 'Combined packages' : 'Paquetes combinados', description: en ? 'Better price than separate' : 'Mejor precio que por separado' },
     ]}],
   };
 }
@@ -254,19 +257,32 @@ function listaTiposConsulta(idioma = 'es') {
   };
 }
 
-function infoFisioterapia(idioma = 'es') {
-  if (idioma === 'en') return '*Physiotherapy at Stemwell*\n\nA physiotherapist assesses you and designs your rehabilitation plan.\n- First physiotherapy consultation: COP $278,000\n- Follow-up consultation: COP $139,000\n- Rehabilitation sessions (1 or 2 times a week): COP $140,000 per session\n\nThe plan depends on your assessment; I cannot diagnose by chat. To book it, reception will arrange the day and time with you: +57 310 406 8755.';
-  return '*Fisioterapia en Stemwell*\n\nUn fisioterapeuta te valora y define tu plan de rehabilitacion.\n- Primera consulta de fisioterapia: $278.000 COP\n- Consulta de control: $139.000 COP\n- Sesiones de rehabilitacion (1 o 2 veces por semana): $140.000 COP cada una\n\nEl plan depende de tu valoracion; por chat no puedo diagnosticar. Para agendarla, recepcion coordina contigo el dia y la hora: +57 310 406 8755.';
-}
-
-function infoCamaraHiperbarica(idioma = 'es') {
-  if (idioma === 'en') return '*Hyperbaric chamber at Stemwell*\n\nSessions of oxygen breathed under pressure, within protocols defined by the medical team. Whether it is right for you depends on a medical assessment.\n- 1 session: COP $159,038\n- Pack of 3 sessions: COP $453,260\n- Pack of 4 sessions: COP $540,731\n- Pack of 10 sessions: COP $1,272,308\n\nTo book it, reception will arrange the day and time with you: +57 310 406 8755.';
-  return '*Camara hiperbarica en Stemwell*\n\nSesiones de oxigeno respirado bajo presion, dentro de protocolos definidos por el equipo medico. Que sea adecuada para ti depende de una valoracion medica.\n- 1 sesion: $159.038 COP\n- Paquete de 3 sesiones: $453.260 COP\n- Paquete de 4 sesiones: $540.731 COP\n- Paquete de 10 sesiones: $1.272.308 COP\n\nPara agendarla, recepcion coordina contigo el dia y la hora: +57 310 406 8755.';
+function infoServicio(clave, idioma = 'es') {
+  const en = idioma === 'en';
+  const pie = en ? '\n\nPrices in COP. Packages are personal and non-transferable, valid for the period shown. To book, reception will arrange the day and time with you: +57 310 406 8755.' : '\n\nPrecios en COP. Los paquetes son personales e intransferibles, con la vigencia indicada. Para agendar, recepcion coordina contigo el dia y la hora: +57 310 406 8755.';
+  const t = {
+    rehab: en
+      ? '*Rehabilitation at Stemwell*\nWith a physiotherapist, 1 or 2 times a week.\n- Single session: $140,000\n- 5-session pack: $675,000 ($135,000 each), valid 30 days\n- 10-session pack: $1,300,000 ($130,000 each), valid 45 days'
+      : '*Rehabilitacion en Stemwell*\nCon fisioterapeuta, 1 a 2 veces por semana.\n- Sesion individual: $140.000\n- Bono 5 sesiones: $675.000 ($135.000 c/u), vigencia 30 dias\n- Bono 10 sesiones: $1.300.000 ($130.000 c/u), vigencia 45 dias',
+    recuperacion: en
+      ? '*Muscle recovery and release*\nPressotherapy + percussion + sports massage.\n- Upper body (~1 h): $155,000\n- Lower body (~1 h): $155,000\n- Full body (~1 h 30): $230,000\n- 5-pack upper or lower: $735,000 ($147,000 each), valid 5 months\n- 5-pack full body: $1,090,000 ($218,000 each), valid 5 months'
+      : '*Recuperacion y descarga muscular*\nPresoterapia + vibropercusion + masaje deportivo.\n- Tren superior (~1 h): $155.000\n- Tren inferior (~1 h): $155.000\n- Cuerpo completo (~1 h 30): $230.000\n- Bono 5 superior o inferior: $735.000 ($147.000 c/u), 5 meses\n- Bono 5 cuerpo completo: $1.090.000 ($218.000 c/u), 5 meses',
+    presoterapia: en
+      ? '*Pressotherapy*\n45-minute session with a double cycle.\n- Single session: $70,000\n- 5-session pack: $310,000 ($62,000 each), valid 45 days\n- 10-session pack: $600,000 ($60,000 each), valid 90 days'
+      : '*Presoterapia*\nSesion de 45 minutos con doble ciclo.\n- Sesion individual: $70.000\n- Bono 5 sesiones: $310.000 ($62.000 c/u), vigencia 45 dias\n- Bono 10 sesiones: $600.000 ($60.000 c/u), vigencia 90 dias',
+    camara: en
+      ? '*Hyperbaric chamber at Stemwell*\nRequires a prior assessment.\n- Single session: $150,000\n- 5-session pack: $675,000 ($135,000 each), valid 45 days\n- 10-session pack: $1,275,000 ($127,500 each), valid 75 days\n- 20-session intensive cycle: $2,400,000 ($120,000 each), valid 120 days'
+      : '*Camara hiperbarica en Stemwell*\nRequiere valoracion previa.\n- Sesion individual: $150.000\n- Bono 5 sesiones: $675.000 ($135.000 c/u), vigencia 45 dias\n- Bono 10 sesiones: $1.275.000 ($127.500 c/u), vigencia 75 dias\n- Bono 20 ciclo intensivo: $2.400.000 ($120.000 c/u), vigencia 120 dias',
+    paquetes: en
+      ? '*Combined packages* (better price than buying each service separately)\n- Sports recovery: 4 releases + 4 chamber: $1,100,000, valid 120 days (save $120,000)\n- Musculoskeletal injury: 8 rehab + 4 pressotherapy + 5 chamber: $1,965,000, valid 30 days (save $185,000)\n- Legs and edema: 8 pressotherapy + 3 drainage + 3 chamber: $1,120,000, valid 60 days (save $130,000)\n- Monthly maintenance: 2 releases + 2 chamber: $550,000, valid 30 days (save $60,000)'
+      : '*Paquetes combinados* (mejor precio que comprar cada servicio por separado)\n- Recuperacion deportiva: 4 descargas + 4 camara: $1.100.000, vigencia 120 dias (ahorras $120.000)\n- Lesion musculoesqueletica: 8 rehab + 4 presoterapia + 5 camara: $1.965.000, vigencia 30 dias (ahorras $185.000)\n- Piernas y edema: 8 presoterapia + 3 drenaje + 3 camara: $1.120.000, vigencia 60 dias (ahorras $130.000)\n- Mantenimiento mensual: 2 descargas + 2 camara: $550.000, vigencia 30 dias (ahorras $60.000)',
+  };
+  return t[clave] + pie;
 }
 
 function informacionStemwell(idioma = 'es') {
-  if (idioma === 'en') return 'Stemwell is a regenerative medicine clinic in Bogota. We provide responsible information about our procedures without diagnosing by chat. A physician must assess every individual case.\n\nVirtual consultation: COP $50,000\nIn-person consultation: COP $80,000\nPhysiotherapy and hyperbaric chamber are also available: choose Book appointment to see them.\n\nReception: +57 310 406 8755';
-  return 'Stemwell es una clinica de medicina regenerativa en Bogota. Podemos orientarte sobre nuestros procedimientos sin diagnosticar por chat; cada caso debe ser valorado por un medico.\n\nConsulta virtual: $50.000 COP\nConsulta presencial: $80.000 COP\nTambien tenemos fisioterapia y camara hiperbarica: elige Agendar cita para verlas.\n\nRecepcion: +57 310 406 8755';
+  if (idioma === 'en') return 'Stemwell is a regenerative medicine clinic in Bogota. We provide responsible information about our procedures without diagnosing by chat. A physician must assess every individual case.\n\nVirtual consultation: COP $50,000\nIn-person consultation: COP $80,000\nWe also offer rehabilitation, muscle recovery, pressotherapy and hyperbaric chamber: choose Book appointment to see them.\n\nReception: +57 310 406 8755';
+  return 'Stemwell es una clinica de medicina regenerativa en Bogota. Podemos orientarte sobre nuestros procedimientos sin diagnosticar por chat; cada caso debe ser valorado por un medico.\n\nConsulta virtual: $50.000 COP\nConsulta presencial: $80.000 COP\nTambien tenemos rehabilitacion, recuperacion muscular, presoterapia y camara hiperbarica: elige Agendar cita para verlas.\n\nRecepcion: +57 310 406 8755';
 }
 
 function confirmacionCita(nombre, fecha, hora, tipoConsulta, idioma = 'es') {
@@ -341,7 +357,7 @@ function esEntradaEsperada(st, texto) {
   const t = normalizarAux(texto);
   if (!paso) return false;
   if (paso === 'pedir_correo') return esCorreoCliente(texto);
-  if (paso === 'pedir_servicio') return /(srv_|consulta|consult|fisio|physio|hiperb|camara|chamber)/.test(t);
+  if (paso === 'pedir_servicio') return /(srv_|consulta|consult|fisio|physio|rehab|recuper|descarga|presoter|pressoth|hiperb|camara|chamber|paquete|combinad|package)/.test(t);
   // 'consultoria|advisory': listas viejas que aun la ofrecian; se tratan como entrada esperada para volver a preguntar el tipo.
   if (paso === 'pedir_tipo') return /(consultoria|advisory|virtual|presencial|in-person|pagina|website|medilink)/.test(t);
   if (paso === 'pedir_doctor') return (st.doctores || []).some(d => t.includes(normalizarAux(d.nombre)) || t === 'doctor_' + d.id);
@@ -740,16 +756,19 @@ async function handleIncomingMessage(message, contact, options = {}) {
       }
     }
 
-    // ── PASO: ELEGIR SERVICIO (consulta, fisioterapia o camara hiperbarica) ──
+    // ── PASO: ELEGIR SERVICIO (consulta, rehabilitacion, recuperacion, presoterapia, camara, paquetes) ──
     else if (st.paso === 'pedir_servicio') {
       const s = normalizarAux(texto);
       const botonesInfo = idioma === 'en' ? ['Speak to an advisor', 'Book appointment', 'Menu'] : ['Hablar con un asesor', 'Agendar cita', 'Menu'];
-      if (/(fisio|physio)/.test(s)) {
+      const clave = /(paquete|combinad|package)/.test(s) ? 'paquetes'
+        : /(hiperb|camara|chamber)/.test(s) ? 'camara'
+        : /(presoter|pressoth)/.test(s) ? 'presoterapia'
+        : /(recuper|descarga|muscular|recovery)/.test(s) ? 'recuperacion'
+        : /(rehab|fisio|physio)/.test(s) ? 'rehab'
+        : null;
+      if (clave) {
         await agenda.setEstadoAgenda(telefono, { paso: 'menu_principal' });
-        botonesRespuesta = { texto: infoFisioterapia(idioma), botones: botonesInfo };
-      } else if (/(hiperb|camara|chamber)/.test(s)) {
-        await agenda.setEstadoAgenda(telefono, { paso: 'menu_principal' });
-        botonesRespuesta = { texto: infoCamaraHiperbarica(idioma), botones: botonesInfo };
+        botonesRespuesta = { texto: infoServicio(clave, idioma), botones: botonesInfo };
       } else if (/(consult|medic|physician|doctor)/.test(s)) {
         await agenda.setEstadoAgenda(telefono, { ...st, paso: 'pedir_tipo' });
         listRespuesta = listaTiposConsulta(idioma);
