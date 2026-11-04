@@ -435,6 +435,32 @@ function empezarValoracion(st) {
     ...(st.leadId ? { leadId: st.leadId, leadNombre: st.leadNombre, email: st.email } : {}) };
 }
 
+// Sin bono: la persona deja sus dias y horas con listas (no escribiendo). Es una SOLICITUD, no una reserva.
+function listaHorasPref(dia, idioma) {
+  const en = idioma === 'en';
+  const horas = ['08:00', '09:00', '10:00', '11:00', '12:00', '14:00', '15:00', '16:00'];
+  return {
+    texto: (en ? 'What time works for you on ' : 'A que hora te sirve el ') + dia + '?',
+    buttonLabel: en ? 'Choose time' : 'Elegir hora',
+    sections: [{ title: en ? 'Times' : 'Horas', rows: [...horas.map(x => ({ id: 'pref_' + x, title: x })), { id: 'pref_any', title: en ? 'Any time' : 'Cualquier hora' }] }],
+  };
+}
+
+async function enviarSolicitudSesiones({ st, prefs, idioma }) {
+  const en = idioma === 'en';
+  const r = await crmInterno.solicitudSesiones({
+    leadId: st.leadId, servicio: SERVICIO_NOMBRE[st.servicioClave] || st.servicioClave,
+    bono: st.bono.titulo + ' · ' + st.bono.desc, detalle: prefs.join('; '),
+  });
+  const estado = { paso: 'menu_principal', servicioClave: st.servicioClave, leadId: st.leadId, leadNombre: st.leadNombre, email: st.email };
+  if (r.ok) {
+    return { estado, botones: ['Menu'], texto: en
+      ? `Done! I left your request for ${st.bono.titulo} with reception:\n${prefs.map(x => '- ' + x).join('\n')}\nThey will contact you to confirm the schedule and the payment.`
+      : `Listo! Deje tu solicitud de ${st.bono.titulo} con recepcion:\n${prefs.map(x => '- ' + x).join('\n')}\nTe contactaran para confirmar los horarios y el pago.` };
+  }
+  return { estado, botones: en ? ['Speak to an advisor', 'Menu'] : ['Hablar con un asesor', 'Menu'], texto: (en ? 'I could not leave your request. Reception can help you: ' : 'No pude dejar tu solicitud. Recepcion te ayuda: ') + TXT_RECEPCION + '.' };
+}
+
 function textoDia(opcion, total, hechas, idioma) {
   const en = idioma === 'en';
   if (total > 1) return en ? `Session ${hechas + 1} of ${total} of ${opcion.etiqueta}. Which day works for you?` : `Sesion ${hechas + 1} de ${total} de ${opcion.etiqueta}. Que dia te sirve?`;
@@ -530,7 +556,9 @@ function esEntradaEsperada(st, texto) {
   const t = normalizarAux(texto);
   if (!paso) return false;
   if (paso === 'pedir_correo') return esCorreoCliente(texto);
-  if (paso === 'solicitud_detalle') return texto.trim().length >= 2;
+  if (paso === 'solicitud_mas') return /(agregar|otro dia|add|enviar|listo|send)/.test(t);
+  if (paso === 'solicitud_hora') return /(\d|cualquier|any)/.test(t);
+  if (paso === 'solicitud_dia') return Boolean(extraerDiaSeleccionado(texto));
   if (paso === 'solicitud_bono') return /(valoracion|assessment|sesion|bono|tren|cuerpo|intensivo|recuperacion|lesion|piernas|mantenimiento)/.test(t);
   if (paso === 'sesion_cantidad') return /\d/.test(t);
   if (paso === 'sesion_paquete') return /^(\s*\d+\.|opc_)/.test(t);
@@ -623,7 +651,9 @@ function pistaParaRetomar(st, idioma = 'es') {
   const en = idioma === 'en';
   const pistas = {
     solicitud_bono: en ? 'When you are ready, choose an option from the previous list.' : 'Cuando quieras continuar, elige una opcion de la lista anterior.',
-    solicitud_detalle: en ? 'To finish, tell me which days and times work for you.' : 'Para terminar, cuentame que dias y horarios te sirven.',
+    solicitud_dia: en ? 'To finish, choose a day from the previous list.' : 'Para terminar, elige un dia de la lista anterior.',
+    solicitud_hora: en ? 'To finish, choose a time from the previous list.' : 'Para terminar, elige una hora de la lista anterior.',
+    solicitud_mas: en ? 'Tap Add another day or Send request.' : 'Toca Agregar otro dia o Enviar solicitud.',
     sesion_cantidad: en ? 'When you are ready, choose how many sessions from the previous list.' : 'Cuando quieras continuar, elige cuantas sesiones de la lista anterior.',
     sesion_paquete: en ? 'When you are ready, choose your pack from the previous list.' : 'Cuando quieras continuar, elige tu paquete de la lista anterior.',
     sesion_dia: en ? 'When you are ready, choose a day from the previous list.' : 'Cuando quieras continuar, elige un dia de la lista anterior.',
@@ -1129,36 +1159,72 @@ async function handleIncomingMessage(message, contact, options = {}) {
         listRespuesta = listaTiposConsulta(idioma);
         listRespuesta.texto = (idioma === 'en' ? 'The assessment is a consultation with the doctor. ' : 'La valoracion es una consulta con el medico. ') + listRespuesta.texto;
       } else {
-      const m = /^bono_(\d+)$/.exec(texto);
-      const bono = m ? bonos[parseInt(m[1], 10)] : bonos.find(b => normalizarAux(b.titulo) === s);
-      if (!bono) {
-        listRespuesta = listaBonos(st.servicioClave, idioma, idioma === 'en' ? 'Please choose an option from the list.' : 'Por favor elige una opcion de la lista.');
-      } else {
-        await agenda.setEstadoAgenda(telefono, { ...st, paso: 'solicitud_detalle', bono });
-        const valoracion = st.servicioClave === 'camara' || st.servicioClave === 'paquetes'
-          ? (idioma === 'en' ? '\n\nThe hyperbaric chamber requires a prior assessment; reception will arrange it if you do not have one yet.' : '\n\nLa camara hiperbarica requiere valoracion previa; recepcion la coordina contigo si aun no la tienes.')
-          : '';
-        respuesta = (idioma === 'en'
-          ? `Great: ${bono.titulo}. Tell me which days and times work for you, for example: Tuesdays and Thursdays in the afternoon.`
-          : `Perfecto: ${bono.titulo}. Cuentame que dias y horarios te sirven, por ejemplo: martes y jueves en la tarde.`) + valoracion;
-      }
+        const m = /^bono_(\d+)$/.exec(texto);
+        const bono = m ? bonos[parseInt(m[1], 10)] : bonos.find(b => normalizarAux(b.titulo) === s);
+        if (!bono) {
+          listRespuesta = listaBonos(st.servicioClave, idioma, idioma === 'en' ? 'Please choose an option from the list.' : 'Por favor elige una opcion de la lista.');
+        } else {
+          const nb = /Bono (\d+)/.exec(bono.titulo);
+          const nSesiones = nb ? parseInt(nb[1], 10) : (st.servicioClave === 'paquetes' ? null : 1);
+          await agenda.setEstadoAgenda(telefono, { ...st, paso: 'solicitud_dia', bono, nSesiones, prefs: [] });
+          const valoracion = st.servicioClave === 'camara' || st.servicioClave === 'paquetes'
+            ? (idioma === 'en' ? '\n\nThe hyperbaric chamber requires a prior assessment; reception will arrange it if you do not have one yet.' : '\n\nLa camara hiperbarica requiere valoracion previa; recepcion la coordina contigo si aun no la tienes.')
+            : '';
+          listRespuesta = listaDiasSesion(idioma, (idioma === 'en'
+            ? `Great: ${bono.titulo}. Choose a day that works for you.`
+            : `Perfecto: ${bono.titulo}. Elige un dia que te sirva.`) + valoracion);
+        }
       }
     }
 
-    // ── PASO: SIN BONO — DISPONIBILIDAD Y SOLICITUD PARA RECEPCION ──
-    else if (st.paso === 'solicitud_detalle') {
-      const en = idioma === 'en';
-      const r = await crmInterno.solicitudSesiones({
-        leadId: st.leadId, servicio: SERVICIO_NOMBRE[st.servicioClave] || st.servicioClave,
-        bono: st.bono.titulo + ' · ' + st.bono.desc, detalle: texto.trim().slice(0, 500),
-      });
-      await agenda.setEstadoAgenda(telefono, { paso: 'menu_principal', servicioClave: st.servicioClave, leadId: st.leadId, leadNombre: st.leadNombre, email: st.email });
-      if (r.ok) {
-        botonesRespuesta = { texto: en
-          ? `Done! I left your request for ${st.bono.titulo} with reception. They will contact you to confirm the schedule and the payment.`
-          : `Listo! Deje tu solicitud de ${st.bono.titulo} con recepcion. Te contactaran para confirmar los horarios y el pago.`, botones: ['Menu'] };
+    // ── PASO: SIN BONO — DIA QUE LE SIRVE ──
+    else if (st.paso === 'solicitud_dia') {
+      const dia = extraerDiaSeleccionado(texto);
+      if (!dia) {
+        listRespuesta = listaDiasSesion(idioma, idioma === 'en' ? 'Please choose a day from the list.' : 'Por favor elige un dia de la lista.');
       } else {
-        botonesRespuesta = { texto: (en ? 'I could not leave your request. Reception can help you: ' : 'No pude dejar tu solicitud. Recepcion te ayuda: ') + TXT_RECEPCION + '.', botones: en ? ['Speak to an advisor', 'Menu'] : ['Hablar con un asesor', 'Menu'] };
+        const nombreDia = DIAS_MENU.find(d => normalizarAux(d) === dia);
+        await agenda.setEstadoAgenda(telefono, { ...st, paso: 'solicitud_hora', diaPref: nombreDia });
+        listRespuesta = listaHorasPref(nombreDia, idioma);
+      }
+    }
+
+    // ── PASO: SIN BONO — HORA QUE LE SIRVE ──
+    else if (st.paso === 'solicitud_hora') {
+      const s = normalizarAux(texto);
+      const cualquiera = /(cualquier|any)/.test(s);
+      const hora = cualquiera ? null : extraerHora(texto);
+      if (!cualquiera && !hora) {
+        listRespuesta = listaHorasPref(st.diaPref, idioma);
+      } else {
+        const en = idioma === 'en';
+        const prefs = [...(st.prefs || []), st.diaPref + ' ' + (hora || (en ? 'any time' : 'cualquier hora'))];
+        if (prefs.length >= Math.min(st.nSesiones || 5, 5)) {   // ya anoto tantos dias como sesiones (o 5)
+          const r = await enviarSolicitudSesiones({ st, prefs, idioma });
+          await agenda.setEstadoAgenda(telefono, r.estado);
+          botonesRespuesta = { texto: r.texto, botones: r.botones };
+        } else {
+          await agenda.setEstadoAgenda(telefono, { ...st, paso: 'solicitud_mas', prefs });
+          botonesRespuesta = {
+            texto: (en ? 'Noted:\n' : 'Anotado:\n') + prefs.map(x => '- ' + x).join('\n') + (en ? '\n\nDo you want to add another day or send your request now?' : '\n\nAgregas otro dia o enviamos tu solicitud ahora?'),
+            botones: en ? ['Add another day', 'Send request', 'Menu'] : ['Agregar otro dia', 'Enviar solicitud', 'Menu'],
+          };
+        }
+      }
+    }
+
+    // ── PASO: SIN BONO — ¿OTRO DIA O ENVIAR? ──
+    else if (st.paso === 'solicitud_mas') {
+      const s = normalizarAux(texto);
+      if (/(agregar|otro dia|add)/.test(s)) {
+        await agenda.setEstadoAgenda(telefono, { ...st, paso: 'solicitud_dia' });
+        listRespuesta = listaDiasSesion(idioma, idioma === 'en' ? 'Choose another day.' : 'Elige otro dia.');
+      } else if (/(enviar|listo|send)/.test(s)) {
+        const r = await enviarSolicitudSesiones({ st, prefs: st.prefs || [], idioma });
+        await agenda.setEstadoAgenda(telefono, r.estado);
+        botonesRespuesta = { texto: r.texto, botones: r.botones };
+      } else {
+        botonesRespuesta = { texto: idioma === 'en' ? 'Do you want to add another day or send your request now?' : 'Agregas otro dia o enviamos tu solicitud ahora?', botones: idioma === 'en' ? ['Add another day', 'Send request', 'Menu'] : ['Agregar otro dia', 'Enviar solicitud', 'Menu'] };
       }
     }
 
@@ -1422,7 +1488,7 @@ async function handleIncomingMessage(message, contact, options = {}) {
     }
 
     // ═══ ENVÍO DE RESPUESTA (texto, botones o lista) ═══
-    const pasosAgenda = ['solicitud_bono','solicitud_detalle','sesion_cantidad','sesion_paquete','sesion_dia','sesion_hora','pedir_servicio','pedir_tipo','pedir_doctor','pedir_correo','validado','validado_nuevo','seleccionar_dia','seleccionar_hora','confirmar_cancelar','post_agendado'];
+    const pasosAgenda = ['solicitud_bono','solicitud_dia','solicitud_hora','solicitud_mas','sesion_cantidad','sesion_paquete','sesion_dia','sesion_hora','pedir_servicio','pedir_tipo','pedir_doctor','pedir_correo','validado','validado_nuevo','seleccionar_dia','seleccionar_hora','confirmar_cancelar','post_agendado'];
     // Toda respuesta libre lleva siempre los botones: agendar, asesor y menu.
     if (respuesta && !botonesRespuesta && !listRespuesta && !pasosAgenda.includes(st.paso) && !sinBotonesLibres && intencionGlobal !== 'hablar_asesor' && !escalado) {
       botonesRespuesta = await prepararRespuestaConBotones(telefono, nombre, respuesta, idioma);
