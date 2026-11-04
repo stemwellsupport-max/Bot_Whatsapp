@@ -781,6 +781,7 @@ async function apiAgendar({ leadId, estado, fecha, hora, doctorId, tipoConsulta 
 module.exports = {
   // Inicialización
   initDB, pool,
+  buscarLeadPorTelefonoEmail,
   
   // Contactos
   saveContacto, 

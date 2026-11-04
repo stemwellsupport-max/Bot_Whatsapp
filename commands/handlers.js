@@ -202,6 +202,23 @@ async function buscarLeadTrasValidar(telefono, email) {
   return leads && leads.length ? leads[0] : null;
 }
 
+// Para agendar sesiones: si la persona ya existe (por su correo o su numero) se usa esa ficha SIN modificarla;
+// si no existe, se crea la ficha con su nombre de WhatsApp y su correo, y se sigue. Nunca se deja a la persona sin poder agendar.
+async function leadParaSesion(telefono, email, nombre) {
+  try {
+    const existente = await agenda.buscarLeadPorTelefonoEmail({ telefono, email });
+    if (existente) return existente;
+    const id = await agenda.apiCrearLead({
+      nombre: nombre || 'Paciente', telefono, email: email || '', canal: 'WhatsApp',
+      notas: 'Lead creado por bot de WhatsApp (agendar sesion)',
+    });
+    return id ? { id, nombre: nombre || 'Paciente' } : null;
+  } catch (e) {
+    console.error('❌ leadParaSesion:', e.message);
+    return null;
+  }
+}
+
 // ══════════════════════════════════════════════════════════
 // NUEVO FLUJO GUIADO POR BOTONES
 // ══════════════════════════════════════════════════════════
@@ -942,7 +959,7 @@ async function handleIncomingMessage(message, contact, options = {}) {
           if (r.lista) listRespuesta = r.lista; else botonesRespuesta = { texto: r.texto, botones: r.botones };
         } else {
           await agenda.setEstadoAgenda(telefono, { ...st, paso: 'pedir_correo', accion: 'sesion' });
-          respuesta = idioma === 'en' ? 'To find your pack, type the email you registered with.' : 'Para encontrar tu paquete, escribe el correo con el que te registraste.\n\n(Ej: nombre@correo.com)';
+          respuesta = idioma === 'en' ? 'To book, please type your email.' : 'Para agendar, escribeme tu correo electronico.\n\n(Ej: nombre@correo.com)';
           sinBotonesLibres = true;
         }
       } else if (texto.includes('📅 Agendar') || intencionGlobal === 'agendar_cita') {
@@ -1248,8 +1265,9 @@ async function handleIncomingMessage(message, contact, options = {}) {
     else if (st.paso === 'pedir_correo') {
       if (esCorreoCliente(texto)) {
         const email = texto.trim();
-        const lead = await buscarLeadTrasValidar(telefono, email);
+        let lead = await buscarLeadTrasValidar(telefono, email);
         if (st.accion === 'sesion') {
+          if (!lead) lead = await leadParaSesion(telefono, email, nombre);
           const r = await prepararSesiones({ st: { ...st, email }, lead, nombre, idioma });
           await agenda.setEstadoAgenda(telefono, r.estado);
           if (r.lista) listRespuesta = r.lista; else botonesRespuesta = { texto: r.texto, botones: r.botones };
