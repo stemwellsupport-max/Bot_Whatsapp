@@ -10,6 +10,7 @@ const { getSesion, setSesion } = require('../services/sesiones');
 const { responderConIA, detectarIdioma, consumioFalloTotal } = require('../services/ia-local');
 const { detectarIntencion } = require('../services/intents');
 const agenda = require('../services/agenda');
+const crmInterno = require('../services/crm-interno');
 const identidad = require('../services/identidad');
 const { isPaused, estaBloqueado, savePendingInbound, requestAdvisor, isBusinessHours } = require('../services/human-control');
 
@@ -280,6 +281,91 @@ function infoServicio(clave, idioma = 'es') {
   return t[clave] + pie;
 }
 
+// ── Reserva de sesiones de paquetes por el bot (2026-11-04) ──
+// El bot no escribe la cita: la pide al CRM (services/crm-interno.js), que aplica las reglas de recepcion.
+const TXT_RECEPCION = '+57 310 406 8755';
+
+function fechaISO(d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+function listaDiasSesion(idioma, texto) {
+  const en = idioma === 'en';
+  return {
+    texto: texto || (en ? 'Which day works for you?' : 'Que dia te sirve?'),
+    buttonLabel: en ? 'Choose day' : 'Elegir dia',
+    sections: [{ title: en ? 'Days' : 'Dias', rows: DIAS_MENU.map(d => ({
+      id: 'dia_' + normalizarAux(d), title: d, description: formatearFecha(fechaParaDia(normalizarAux(d))),
+    })) }],
+  };
+}
+
+function listaHorasSesion(horas, fecha, idioma) {
+  const en = idioma === 'en';
+  let muestra = horas;
+  if (horas.length > 9) {   // WhatsApp admite 10 filas: se reparten 9 horas a lo largo del dia y queda "Otro dia"
+    muestra = [];
+    for (let i = 0; i < 9; i++) muestra.push(horas[Math.round(i * (horas.length - 1) / 8)]);
+    muestra = Array.from(new Set(muestra));
+  }
+  const rows = muestra.map(x => ({ id: 'hora_' + x, title: x }));
+  rows.push({ id: 'otro_dia', title: en ? 'Another day' : 'Otro dia' });
+  return {
+    texto: (en ? 'Times available on ' : 'Horas disponibles el ') + formatearFecha(fecha) + (en ? '. Choose one, or type another time like 15:30.' : '. Elige una, o escribe otra hora, por ejemplo 15:30.'),
+    buttonLabel: en ? 'Choose time' : 'Elegir hora',
+    sections: [{ title: en ? 'Times' : 'Horas', rows }],
+  };
+}
+
+// Despues de saber quien es la persona: ¿que sesiones le quedan por agendar de este servicio?
+async function prepararSesiones({ st, lead, nombre, idioma }) {
+  const en = idioma === 'en';
+  const recep = en ? 'Reception can help you: ' + TXT_RECEPCION + '.' : 'Recepcion te ayuda: ' + TXT_RECEPCION + '.';
+  const volver = en ? ['Speak to an advisor', 'Menu'] : ['Hablar con un asesor', 'Menu'];
+  const base = { paso: 'menu_principal', servicioClave: st.servicioClave };
+  if (!lead) {
+    return { estado: base, botones: volver, texto: en
+      ? 'I could not find a record with that email, so I cannot book a session yet. To buy your pack, ' + recep
+      : 'No encontre un registro con ese correo, asi que todavia no puedo agendar una sesion. Para comprar tu bono o paquete, ' + recep };
+  }
+  const persona = { leadId: lead.id, leadNombre: lead.nombre, email: st.email };
+  const res = await crmInterno.sesionesPorAgendar(lead.id, st.servicioClave);
+  if (!res.ok) {
+    return { estado: { ...base, ...persona }, botones: volver, texto: en
+      ? 'I had a problem checking your pack. ' + recep
+      : 'Tuve un problema consultando tu paquete. ' + recep };
+  }
+  const opciones = (res.data && res.data.opciones) || [];
+  if (!opciones.length) {
+    return { estado: { ...base, ...persona }, botones: volver, texto: en
+      ? 'I did not find a pack with sessions left to book for this service. To buy your pack, ' + recep
+      : 'No encontre un paquete con sesiones por agendar de este servicio. Para comprar tu bono o paquete, ' + recep };
+  }
+  if (opciones.length === 1) return elegirOpcionSesion({ base, persona, opcion: opciones[0], idioma });
+  return {
+    estado: { ...base, ...persona, paso: 'sesion_paquete', opciones },
+    lista: {
+      texto: en ? 'Which of your packs do you want to use?' : 'Cual de tus paquetes quieres usar?',
+      buttonLabel: en ? 'Choose pack' : 'Elegir paquete',
+      sections: [{ title: en ? 'Your packs' : 'Tus paquetes', rows: opciones.slice(0, 10).map((o, i) => ({
+        id: 'opc_' + i,
+        title: (String(i + 1) + '. ' + o.etiqueta).slice(0, 24),
+        description: (en ? 'Sessions left: ' : 'Sesiones por agendar: ') + o.restantes,
+      })) }],
+    },
+  };
+}
+
+function elegirOpcionSesion({ base, persona, opcion, idioma }) {
+  const en = idioma === 'en';
+  return {
+    estado: { ...base, ...persona, paso: 'sesion_dia', opcion },
+    lista: listaDiasSesion(idioma, en
+      ? `You have ${opcion.restantes} session(s) left of ${opcion.etiqueta}. Which day works for you?`
+      : `Te quedan ${opcion.restantes} sesion(es) de ${opcion.etiqueta}. Que dia te sirve?`),
+  };
+}
+
 function informacionStemwell(idioma = 'es') {
   if (idioma === 'en') return 'Stemwell is a regenerative medicine clinic in Bogota. We provide responsible information about our procedures without diagnosing by chat. A physician must assess every individual case.\n\nVirtual consultation: COP $50,000\nIn-person consultation: COP $80,000\nWe also offer rehabilitation, muscle recovery, pressotherapy and hyperbaric chamber: choose Book appointment to see them.\n\nReception: +57 310 406 8755';
   return 'Stemwell es una clinica de medicina regenerativa en Bogota. Podemos orientarte sobre nuestros procedimientos sin diagnosticar por chat; cada caso debe ser valorado por un medico.\n\nConsulta virtual: $50.000 COP\nConsulta presencial: $80.000 COP\nTambien tenemos rehabilitacion, recuperacion muscular, presoterapia y camara hiperbarica: elige Agendar cita para verlas.\n\nRecepcion: +57 310 406 8755';
@@ -357,6 +443,9 @@ function esEntradaEsperada(st, texto) {
   const t = normalizarAux(texto);
   if (!paso) return false;
   if (paso === 'pedir_correo') return esCorreoCliente(texto);
+  if (paso === 'sesion_paquete') return /^(\s*\d+\.|opc_)/.test(t);
+  if (paso === 'sesion_dia') return Boolean(extraerDiaSeleccionado(texto));
+  if (paso === 'sesion_hora') return Boolean(extraerHora(texto)) || /(otro dia|another day)/.test(t);
   if (paso === 'pedir_servicio') return /(srv_|consulta|consult|fisio|physio|rehab|recuper|descarga|presoter|pressoth|hiperb|camara|chamber|paquete|combinad|package)/.test(t);
   // 'consultoria|advisory': listas viejas que aun la ofrecian; se tratan como entrada esperada para volver a preguntar el tipo.
   if (paso === 'pedir_tipo') return /(consultoria|advisory|virtual|presencial|in-person|pagina|website|medilink)/.test(t);
@@ -443,6 +532,9 @@ function pistaParaRetomar(st, idioma = 'es') {
   if (!paso || paso === 'menu_principal') return '';
   const en = idioma === 'en';
   const pistas = {
+    sesion_paquete: en ? 'When you are ready, choose your pack from the previous list.' : 'Cuando quieras continuar, elige tu paquete de la lista anterior.',
+    sesion_dia: en ? 'When you are ready, choose a day from the previous list.' : 'Cuando quieras continuar, elige un dia de la lista anterior.',
+    sesion_hora: en ? 'When you are ready, choose a time from the previous list.' : 'Cuando quieras continuar, elige una hora de la lista anterior.',
     pedir_servicio: en ? 'When you are ready, choose the service from the previous list.' : 'Cuando quieras continuar, elige el servicio de la lista anterior.',
     pedir_tipo: en ? 'When you are ready, choose the appointment type from the previous list.' : 'Cuando quieras continuar, elige el tipo de cita de la lista anterior.',
     pedir_doctor: en ? 'When you are ready, choose a physician from the previous list.' : 'Cuando quieras continuar, elige un medico de la lista anterior.',
@@ -712,7 +804,19 @@ async function handleIncomingMessage(message, contact, options = {}) {
 
     // ── PASO: MENÚ PRINCIPAL ──
     else if (st.paso === 'menu_principal') {
-      if (texto.includes('📅 Agendar') || intencionGlobal === 'agendar_cita') {
+      if (/(agendar (otra )?sesion|book (another )?session)/.test(normalizarAux(texto))) {
+        if (!st.servicioClave) {
+          await agenda.setEstadoAgenda(telefono, { paso: 'pedir_servicio', accion: 'agendar' });
+          listRespuesta = listaServicios(idioma);
+        } else if (st.leadId) {
+          const r = await prepararSesiones({ st, lead: { id: st.leadId, nombre: st.leadNombre }, nombre, idioma });
+          await agenda.setEstadoAgenda(telefono, r.estado);
+          if (r.lista) listRespuesta = r.lista; else botonesRespuesta = { texto: r.texto, botones: r.botones };
+        } else {
+          await agenda.setEstadoAgenda(telefono, { ...st, paso: 'pedir_correo', accion: 'sesion' });
+          respuesta = idioma === 'en' ? 'To find your pack, please enter your email.' : pedirEmailIdentidad();
+        }
+      } else if (texto.includes('📅 Agendar') || intencionGlobal === 'agendar_cita') {
         await agenda.setEstadoAgenda(telefono, { paso: 'pedir_servicio', accion: 'agendar' });
         listRespuesta = listaServicios(idioma);
       } else if (texto.includes('🔄 Reagendar') || intencionGlobal === 'reagendar_cita') {
@@ -759,7 +863,7 @@ async function handleIncomingMessage(message, contact, options = {}) {
     // ── PASO: ELEGIR SERVICIO (consulta, rehabilitacion, recuperacion, presoterapia, camara, paquetes) ──
     else if (st.paso === 'pedir_servicio') {
       const s = normalizarAux(texto);
-      const botonesInfo = idioma === 'en' ? ['Speak to an advisor', 'Book appointment', 'Menu'] : ['Hablar con un asesor', 'Agendar cita', 'Menu'];
+      const botonesInfo = idioma === 'en' ? ['Book session', 'Speak to an advisor', 'Menu'] : ['Agendar sesion', 'Hablar con un asesor', 'Menu'];
       const clave = /(paquete|combinad|package)/.test(s) ? 'paquetes'
         : /(hiperb|camara|chamber)/.test(s) ? 'camara'
         : /(presoter|pressoth)/.test(s) ? 'presoterapia'
@@ -767,7 +871,7 @@ async function handleIncomingMessage(message, contact, options = {}) {
         : /(rehab|fisio|physio)/.test(s) ? 'rehab'
         : null;
       if (clave) {
-        await agenda.setEstadoAgenda(telefono, { paso: 'menu_principal' });
+        await agenda.setEstadoAgenda(telefono, { paso: 'menu_principal', servicioClave: clave });
         botonesRespuesta = { texto: infoServicio(clave, idioma), botones: botonesInfo };
       } else if (/(consult|medic|physician|doctor)/.test(s)) {
         await agenda.setEstadoAgenda(telefono, { ...st, paso: 'pedir_tipo' });
@@ -807,6 +911,79 @@ async function handleIncomingMessage(message, contact, options = {}) {
       }
     }
 
+    // ── PASO: ELEGIR CUAL PAQUETE (si tiene mas de uno del servicio) ──
+    else if (st.paso === 'sesion_paquete') {
+      const m = /^\s*(\d+)\./.exec(texto) || /^opc_(\d+)$/.exec(texto);
+      const idx = m ? (m[0].startsWith('opc_') ? parseInt(m[1], 10) : parseInt(m[1], 10) - 1) : -1;
+      const opcion = (st.opciones || [])[idx];
+      if (!opcion) {
+        respuesta = idioma === 'en' ? 'Please choose a pack from the list.' : 'Por favor elige un paquete de la lista.';
+      } else {
+        const r = elegirOpcionSesion({ base: { paso: 'menu_principal', servicioClave: st.servicioClave }, persona: { leadId: st.leadId, leadNombre: st.leadNombre, email: st.email }, opcion, idioma });
+        await agenda.setEstadoAgenda(telefono, r.estado);
+        listRespuesta = r.lista;
+      }
+    }
+
+    // ── PASO: ELEGIR DIA DE LA SESION ──
+    else if (st.paso === 'sesion_dia') {
+      const dia = extraerDiaSeleccionado(texto);
+      if (!dia) {
+        listRespuesta = listaDiasSesion(idioma, idioma === 'en' ? 'Please choose a day from the list.' : 'Por favor elige un dia de la lista.');
+      } else {
+        const fecha = fechaParaDia(dia);
+        const h = await crmInterno.horariosLibres(st.opcion.paquete_id, fechaISO(fecha));
+        if (!h.ok) {
+          respuesta = (idioma === 'en' ? 'I had a problem checking the schedule. Reception can help you: ' : 'Tuve un problema consultando los horarios. Recepcion te ayuda: ') + TXT_RECEPCION + '.';
+        } else if (!(h.data.libres || []).length) {
+          listRespuesta = listaDiasSesion(idioma, (idioma === 'en' ? 'There are no times free on ' : 'Ese dia no hay horas libres (') + formatearFecha(fecha) + (idioma === 'en' ? '. Choose another day.' : '). Elige otro dia.'));
+        } else {
+          await agenda.setEstadoAgenda(telefono, { ...st, paso: 'sesion_hora', fechaISO: fechaISO(fecha), horarios: h.data.libres });
+          listRespuesta = listaHorasSesion(h.data.libres, fecha, idioma);
+        }
+      }
+    }
+
+    // ── PASO: ELEGIR HORA DE LA SESION Y RESERVAR ──
+    else if (st.paso === 'sesion_hora') {
+      const s = normalizarAux(texto);
+      const fecha = new Date(st.fechaISO + 'T12:00:00');
+      const hora = extraerHora(texto);
+      if (/(otro dia|another day)/.test(s)) {
+        await agenda.setEstadoAgenda(telefono, { ...st, paso: 'sesion_dia' });
+        listRespuesta = listaDiasSesion(idioma);
+      } else if (!hora || !(st.horarios || []).includes(hora)) {
+        listRespuesta = listaHorasSesion(st.horarios || [], fecha, idioma);
+      } else {
+        const r = await crmInterno.agendarSesion({ leadId: st.leadId, paqueteId: st.opcion.paquete_id, fecha: st.fechaISO, hora, componente: st.opcion.componente });
+        const base = { paso: 'menu_principal', servicioClave: st.servicioClave, leadId: st.leadId, leadNombre: st.leadNombre, email: st.email };
+        if (r.ok) {
+          const quedan = Math.max(0, (st.opcion.restantes || 1) - 1);
+          await agenda.setEstadoAgenda(telefono, base);
+          const pila = String(st.leadNombre || nombre || '').split(' ')[0];
+          const texto2 = idioma === 'en'
+            ? `Done${pila ? ', ' + pila : ''}! Your *${st.opcion.etiqueta}* session is booked for ${formatearFecha(fecha)} at ${hora}.\n\nSessions left to book in this pack: ${quedan}.\nLocation: Cra 13 #118-08, Bogota - https://maps.app.goo.gl/3WFrcsNHF2zjzJtP6\nTo change or cancel it, contact reception: ${TXT_RECEPCION}.`
+            : `Listo${pila ? ', ' + pila : ''}! Tu sesion de *${st.opcion.etiqueta}* quedo agendada para el ${formatearFecha(fecha)} a las ${hora}.\n\nSesiones por agendar en este paquete: ${quedan}.\nUbicacion: Cra 13 #118-08, Bogota - https://maps.app.goo.gl/3WFrcsNHF2zjzJtP6\nPara cambiarla o cancelarla, comunicate con recepcion: ${TXT_RECEPCION}.`;
+          botonesRespuesta = { texto: texto2, botones: quedan > 0 ? [idioma === 'en' ? 'Book another session' : 'Agendar otra sesion', 'Menu'] : ['Menu'] };
+          if (quedan > 0) await agenda.setEstadoAgenda(telefono, { ...base, servicioClave: st.servicioClave });
+        } else if (r.status === 409) {
+          const h = await crmInterno.horariosLibres(st.opcion.paquete_id, st.fechaISO);
+          const libres = h.ok ? (h.data.libres || []) : [];
+          if (libres.length) {
+            await agenda.setEstadoAgenda(telefono, { ...st, horarios: libres });
+            listRespuesta = listaHorasSesion(libres, fecha, idioma);
+            listRespuesta.texto = (idioma === 'en' ? 'That time was just taken. ' : 'Esa hora acaba de ocuparse. ') + listRespuesta.texto;
+          } else {
+            await agenda.setEstadoAgenda(telefono, { ...st, paso: 'sesion_dia' });
+            listRespuesta = listaDiasSesion(idioma, idioma === 'en' ? 'That day has no times left. Choose another day.' : 'Ese dia ya no tiene horas libres. Elige otro dia.');
+          }
+        } else {
+          await agenda.setEstadoAgenda(telefono, base);
+          botonesRespuesta = { texto: (idioma === 'en' ? 'I could not book it. Reception can help you: ' : 'No pude agendarla. Recepcion te ayuda: ') + TXT_RECEPCION + '.', botones: idioma === 'en' ? ['Speak to an advisor', 'Menu'] : ['Hablar con un asesor', 'Menu'] };
+        }
+      }
+    }
+
     // ── PASO: ELEGIR MEDICO ──
     else if (st.paso === 'pedir_doctor') {
       const selected = (st.doctores || []).find(d => normalizarAux(texto).includes(normalizarAux(d.nombre)) || normalizarAux(texto) === 'doctor_' + d.id);
@@ -823,7 +1000,11 @@ async function handleIncomingMessage(message, contact, options = {}) {
       if (esCorreoCliente(texto)) {
         const email = texto.trim();
         const lead = await buscarLeadTrasValidar(telefono, email);
-        if (lead) {
+        if (st.accion === 'sesion') {
+          const r = await prepararSesiones({ st: { ...st, email }, lead, nombre, idioma });
+          await agenda.setEstadoAgenda(telefono, r.estado);
+          if (r.lista) listRespuesta = r.lista; else botonesRespuesta = { texto: r.texto, botones: r.botones };
+        } else if (lead) {
           // Es cliente existente
           const citas = await identidad.getCitasPorTelefono({ pool, telefono, leadId: lead.id });
           await agenda.setEstadoAgenda(telefono, {
@@ -1057,7 +1238,7 @@ async function handleIncomingMessage(message, contact, options = {}) {
     }
 
     // ═══ ENVÍO DE RESPUESTA (texto, botones o lista) ═══
-    const pasosAgenda = ['pedir_servicio','pedir_tipo','pedir_doctor','pedir_correo','validado','validado_nuevo','seleccionar_dia','seleccionar_hora','confirmar_cancelar','post_agendado'];
+    const pasosAgenda = ['sesion_paquete','sesion_dia','sesion_hora','pedir_servicio','pedir_tipo','pedir_doctor','pedir_correo','validado','validado_nuevo','seleccionar_dia','seleccionar_hora','confirmar_cancelar','post_agendado'];
     // Toda respuesta libre lleva siempre los botones: agendar, asesor y menu.
     if (respuesta && !botonesRespuesta && !listRespuesta && !pasosAgenda.includes(st.paso) && intencionGlobal !== 'hablar_asesor' && !escalado) {
       botonesRespuesta = await prepararRespuestaConBotones(telefono, nombre, respuesta, idioma);
