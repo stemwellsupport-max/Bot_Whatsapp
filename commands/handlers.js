@@ -283,7 +283,47 @@ function infoServicio(clave, idioma = 'es') {
 
 // ── Reserva de sesiones de paquetes por el bot (2026-11-04) ──
 // El bot no escribe la cita: la pide al CRM (services/crm-interno.js), que aplica las reglas de recepcion.
+// Si la persona no tiene el bono, elige cuantas sesiones/que bono quiere y el bot deja una SOLICITUD para recepcion
+// (no vende, no crea paquetes ni cobros).
 const TXT_RECEPCION = '+57 310 406 8755';
+
+const SERVICIO_NOMBRE = {
+  rehab: 'Rehabilitacion', recuperacion: 'Recuperacion y descarga muscular', presoterapia: 'Presoterapia',
+  camara: 'Camara hiperbarica', paquetes: 'Paquete combinado',
+};
+
+// Catalogo oficial (titulo <= 24 caracteres: limite de WhatsApp en las listas)
+const BONOS = {
+  rehab: [
+    { titulo: 'Sesion individual', desc: '$140.000' },
+    { titulo: 'Bono 5 sesiones', desc: '$675.000 ($135.000 c/u) · 30 dias' },
+    { titulo: 'Bono 10 sesiones', desc: '$1.300.000 ($130.000 c/u) · 45 dias' },
+  ],
+  recuperacion: [
+    { titulo: 'Tren superior (~1 h)', desc: '$155.000' },
+    { titulo: 'Tren inferior (~1 h)', desc: '$155.000' },
+    { titulo: 'Cuerpo completo', desc: '$230.000 (~1 h 30)' },
+    { titulo: 'Bono 5 sup. o inf.', desc: '$735.000 ($147.000 c/u) · 5 meses' },
+    { titulo: 'Bono 5 cuerpo completo', desc: '$1.090.000 ($218.000 c/u) · 5 meses' },
+  ],
+  presoterapia: [
+    { titulo: 'Sesion individual', desc: '$70.000 (45 min)' },
+    { titulo: 'Bono 5 sesiones', desc: '$310.000 ($62.000 c/u) · 45 dias' },
+    { titulo: 'Bono 10 sesiones', desc: '$600.000 ($60.000 c/u) · 90 dias' },
+  ],
+  camara: [
+    { titulo: 'Sesion individual', desc: '$150.000' },
+    { titulo: 'Bono 5 sesiones', desc: '$675.000 ($135.000 c/u) · 45 dias' },
+    { titulo: 'Bono 10 sesiones', desc: '$1.275.000 ($127.500 c/u) · 75 dias' },
+    { titulo: 'Bono 20 intensivo', desc: '$2.400.000 ($120.000 c/u) · 120 dias' },
+  ],
+  paquetes: [
+    { titulo: 'Recuperacion deportiva', desc: '$1.100.000 · 4 descargas + 4 camara · 120 dias' },
+    { titulo: 'Lesion musculoesquel.', desc: '$1.965.000 · 8 rehab + 4 presoterapia + 5 camara · 30 dias' },
+    { titulo: 'Piernas y edema', desc: '$1.120.000 · 8 presoterapia + 3 drenaje + 3 camara · 60 dias' },
+    { titulo: 'Mantenimiento mensual', desc: '$550.000 · 2 descargas + 2 camara · 30 dias' },
+  ],
+};
 
 function fechaISO(d) {
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -317,6 +357,31 @@ function listaHorasSesion(horas, fecha, idioma) {
   };
 }
 
+function listaCantidad(opcion, idioma) {
+  const en = idioma === 'en';
+  const max = Math.min(opcion.restantes, 10);
+  const rows = [];
+  for (let k = 1; k <= max; k++) {
+    rows.push({ id: 'cant_' + k, title: k + (en ? (k === 1 ? ' session' : ' sessions') : (k === 1 ? ' sesion' : ' sesiones')),
+      description: k === opcion.restantes ? (en ? 'All the sessions you have left' : 'Todas las que te quedan') : '' });
+  }
+  return {
+    texto: en ? `You have ${opcion.restantes} sessions left of ${opcion.etiqueta}. How many do you want to book now?`
+      : `Tienes ${opcion.restantes} sesiones por agendar de ${opcion.etiqueta}. Cuantas quieres agendar ahora?`,
+    buttonLabel: en ? 'Choose number' : 'Elegir cantidad',
+    sections: [{ title: en ? 'Sessions' : 'Sesiones', rows: rows.map(r => (r.description ? r : { id: r.id, title: r.title })) }],
+  };
+}
+
+function listaBonos(clave, idioma, intro) {
+  const en = idioma === 'en';
+  return {
+    texto: intro,
+    buttonLabel: en ? 'Choose pack' : 'Elegir bono',
+    sections: [{ title: en ? 'Options' : 'Opciones', rows: (BONOS[clave] || []).map((b, i) => ({ id: 'bono_' + i, title: b.titulo, description: b.desc.slice(0, 72) })) }],
+  };
+}
+
 // Despues de saber quien es la persona: ¿que sesiones le quedan por agendar de este servicio?
 async function prepararSesiones({ st, lead, nombre, idioma }) {
   const en = idioma === 'en';
@@ -336,10 +401,13 @@ async function prepararSesiones({ st, lead, nombre, idioma }) {
       : 'Tuve un problema consultando tu paquete. ' + recep };
   }
   const opciones = (res.data && res.data.opciones) || [];
-  if (!opciones.length) {
-    return { estado: { ...base, ...persona }, botones: volver, texto: en
-      ? 'I did not find a pack with sessions left to book for this service. To buy your pack, ' + recep
-      : 'No encontre un paquete con sesiones por agendar de este servicio. Para comprar tu bono o paquete, ' + recep };
+  if (!opciones.length) {   // sin bono: elige que quiere y se deja la solicitud para recepcion
+    return {
+      estado: { ...base, ...persona, paso: 'solicitud_bono' },
+      lista: listaBonos(st.servicioClave, idioma, en
+        ? 'You do not have an active pack for this service yet. Choose what you would like and reception will confirm the schedule and payment with you.'
+        : 'Aun no tienes un bono activo de este servicio. Elige lo que quieres y recepcion te confirma los horarios y el pago.'),
+    };
   }
   if (opciones.length === 1) return elegirOpcionSesion({ base, persona, opcion: opciones[0], idioma });
   return {
@@ -356,14 +424,22 @@ async function prepararSesiones({ st, lead, nombre, idioma }) {
   };
 }
 
-function elegirOpcionSesion({ base, persona, opcion, idioma }) {
+function textoDia(opcion, total, hechas, idioma) {
   const en = idioma === 'en';
+  if (total > 1) return en ? `Session ${hechas + 1} of ${total} of ${opcion.etiqueta}. Which day works for you?` : `Sesion ${hechas + 1} de ${total} de ${opcion.etiqueta}. Que dia te sirve?`;
+  return en ? `You have ${opcion.restantes} session(s) left of ${opcion.etiqueta}. Which day works for you?` : `Te quedan ${opcion.restantes} sesion(es) de ${opcion.etiqueta}. Que dia te sirve?`;
+}
+
+function empezarDias({ base, persona, opcion, total, idioma }) {
   return {
-    estado: { ...base, ...persona, paso: 'sesion_dia', opcion },
-    lista: listaDiasSesion(idioma, en
-      ? `You have ${opcion.restantes} session(s) left of ${opcion.etiqueta}. Which day works for you?`
-      : `Te quedan ${opcion.restantes} sesion(es) de ${opcion.etiqueta}. Que dia te sirve?`),
+    estado: { ...base, ...persona, paso: 'sesion_dia', opcion, total, hechas: 0, reservadas: [] },
+    lista: listaDiasSesion(idioma, textoDia(opcion, total, 0, idioma)),
   };
+}
+
+function elegirOpcionSesion({ base, persona, opcion, idioma }) {
+  if (opcion.restantes > 1) return { estado: { ...base, ...persona, paso: 'sesion_cantidad', opcion }, lista: listaCantidad(opcion, idioma) };
+  return empezarDias({ base, persona, opcion, total: 1, idioma });
 }
 
 function informacionStemwell(idioma = 'es') {
@@ -443,6 +519,9 @@ function esEntradaEsperada(st, texto) {
   const t = normalizarAux(texto);
   if (!paso) return false;
   if (paso === 'pedir_correo') return esCorreoCliente(texto);
+  if (paso === 'solicitud_detalle') return texto.trim().length >= 2;
+  if (paso === 'solicitud_bono') return /(sesion|bono|tren|cuerpo|intensivo|recuperacion|lesion|piernas|mantenimiento)/.test(t);
+  if (paso === 'sesion_cantidad') return /\d/.test(t);
   if (paso === 'sesion_paquete') return /^(\s*\d+\.|opc_)/.test(t);
   if (paso === 'sesion_dia') return Boolean(extraerDiaSeleccionado(texto));
   if (paso === 'sesion_hora') return Boolean(extraerHora(texto)) || /(otro dia|another day)/.test(t);
@@ -532,6 +611,9 @@ function pistaParaRetomar(st, idioma = 'es') {
   if (!paso || paso === 'menu_principal') return '';
   const en = idioma === 'en';
   const pistas = {
+    solicitud_bono: en ? 'When you are ready, choose an option from the previous list.' : 'Cuando quieras continuar, elige una opcion de la lista anterior.',
+    solicitud_detalle: en ? 'To finish, tell me which days and times work for you.' : 'Para terminar, cuentame que dias y horarios te sirven.',
+    sesion_cantidad: en ? 'When you are ready, choose how many sessions from the previous list.' : 'Cuando quieras continuar, elige cuantas sesiones de la lista anterior.',
     sesion_paquete: en ? 'When you are ready, choose your pack from the previous list.' : 'Cuando quieras continuar, elige tu paquete de la lista anterior.',
     sesion_dia: en ? 'When you are ready, choose a day from the previous list.' : 'Cuando quieras continuar, elige un dia de la lista anterior.',
     sesion_hora: en ? 'When you are ready, choose a time from the previous list.' : 'Cuando quieras continuar, elige una hora de la lista anterior.',
@@ -927,6 +1009,19 @@ async function handleIncomingMessage(message, contact, options = {}) {
       }
     }
 
+    // ── PASO: ¿CUANTAS SESIONES AGENDAR AHORA? ──
+    else if (st.paso === 'sesion_cantidad') {
+      const m = /(\d+)/.exec(texto);
+      const n = m ? parseInt(m[1], 10) : 0;
+      if (!n || n > Math.min(st.opcion.restantes, 10)) {
+        listRespuesta = listaCantidad(st.opcion, idioma);
+      } else {
+        const r = empezarDias({ base: { paso: 'menu_principal', servicioClave: st.servicioClave }, persona: { leadId: st.leadId, leadNombre: st.leadNombre, email: st.email }, opcion: st.opcion, total: n, idioma });
+        await agenda.setEstadoAgenda(telefono, r.estado);
+        listRespuesta = r.lista;
+      }
+    }
+
     // ── PASO: ELEGIR DIA DE LA SESION ──
     else if (st.paso === 'sesion_dia') {
       const dia = extraerDiaSeleccionado(texto);
@@ -951,38 +1046,85 @@ async function handleIncomingMessage(message, contact, options = {}) {
       const s = normalizarAux(texto);
       const fecha = new Date(st.fechaISO + 'T12:00:00');
       const hora = extraerHora(texto);
+      const en = idioma === 'en';
       if (/(otro dia|another day)/.test(s)) {
         await agenda.setEstadoAgenda(telefono, { ...st, paso: 'sesion_dia' });
-        listRespuesta = listaDiasSesion(idioma);
+        listRespuesta = listaDiasSesion(idioma, textoDia(st.opcion, st.total || 1, (st.reservadas || []).length, idioma));
       } else if (!hora || !(st.horarios || []).includes(hora)) {
         listRespuesta = listaHorasSesion(st.horarios || [], fecha, idioma);
       } else {
         const r = await crmInterno.agendarSesion({ leadId: st.leadId, paqueteId: st.opcion.paquete_id, fecha: st.fechaISO, hora, componente: st.opcion.componente });
         const base = { paso: 'menu_principal', servicioClave: st.servicioClave, leadId: st.leadId, leadNombre: st.leadNombre, email: st.email };
+        const previas = st.reservadas || [];
+        const total = st.total || 1;
+        const lineas = (lista) => lista.map(x => '- ' + formatearFecha(new Date(x.fecha + 'T12:00:00')) + (en ? ' at ' : ' a las ') + x.hora).join('\n');
+        const pila = String(st.leadNombre || nombre || '').split(' ')[0];
         if (r.ok) {
-          const quedan = Math.max(0, (st.opcion.restantes || 1) - 1);
-          await agenda.setEstadoAgenda(telefono, base);
-          const pila = String(st.leadNombre || nombre || '').split(' ')[0];
-          const texto2 = idioma === 'en'
-            ? `Done${pila ? ', ' + pila : ''}! Your *${st.opcion.etiqueta}* session is booked for ${formatearFecha(fecha)} at ${hora}.\n\nSessions left to book in this pack: ${quedan}.\nLocation: Cra 13 #118-08, Bogota - https://maps.app.goo.gl/3WFrcsNHF2zjzJtP6\nTo change or cancel it, contact reception: ${TXT_RECEPCION}.`
-            : `Listo${pila ? ', ' + pila : ''}! Tu sesion de *${st.opcion.etiqueta}* quedo agendada para el ${formatearFecha(fecha)} a las ${hora}.\n\nSesiones por agendar en este paquete: ${quedan}.\nUbicacion: Cra 13 #118-08, Bogota - https://maps.app.goo.gl/3WFrcsNHF2zjzJtP6\nPara cambiarla o cancelarla, comunicate con recepcion: ${TXT_RECEPCION}.`;
-          botonesRespuesta = { texto: texto2, botones: quedan > 0 ? [idioma === 'en' ? 'Book another session' : 'Agendar otra sesion', 'Menu'] : ['Menu'] };
-          if (quedan > 0) await agenda.setEstadoAgenda(telefono, { ...base, servicioClave: st.servicioClave });
+          const reservadas = [...previas, { fecha: st.fechaISO, hora }];
+          if (reservadas.length < total) {   // faltan sesiones por elegir
+            await agenda.setEstadoAgenda(telefono, { ...st, paso: 'sesion_dia', reservadas, hechas: reservadas.length, fechaISO: null, horarios: null });
+            listRespuesta = listaDiasSesion(idioma, (en ? 'Booked: ' : 'Agendada: ') + formatearFecha(fecha) + (en ? ' at ' : ' a las ') + hora + '.\n\n' + textoDia(st.opcion, total, reservadas.length, idioma));
+          } else {
+            const quedan = Math.max(0, (st.opcion.restantes || reservadas.length) - reservadas.length);
+            await agenda.setEstadoAgenda(telefono, base);
+            const lugar = 'Cra 13 #118-08, Bogota - https://maps.app.goo.gl/3WFrcsNHF2zjzJtP6';
+            const texto2 = en
+              ? `Done${pila ? ', ' + pila : ''}! Your *${st.opcion.etiqueta}* ${reservadas.length > 1 ? 'sessions are' : 'session is'} booked:\n${lineas(reservadas)}\n\nSessions left to book in this pack: ${quedan}.\nLocation: ${lugar}\nTo change or cancel, contact reception: ${TXT_RECEPCION}.`
+              : `Listo${pila ? ', ' + pila : ''}! ${reservadas.length > 1 ? 'Quedaron agendadas tus sesiones' : 'Quedo agendada tu sesion'} de *${st.opcion.etiqueta}*:\n${lineas(reservadas)}\n\nSesiones por agendar en este paquete: ${quedan}.\nUbicacion: ${lugar}\nPara cambiarlas o cancelarlas, comunicate con recepcion: ${TXT_RECEPCION}.`;
+            botonesRespuesta = { texto: texto2, botones: quedan > 0 ? [en ? 'Book another session' : 'Agendar otra sesion', 'Menu'] : ['Menu'] };
+          }
         } else if (r.status === 409) {
           const h = await crmInterno.horariosLibres(st.opcion.paquete_id, st.fechaISO);
           const libres = h.ok ? (h.data.libres || []) : [];
           if (libres.length) {
             await agenda.setEstadoAgenda(telefono, { ...st, horarios: libres });
             listRespuesta = listaHorasSesion(libres, fecha, idioma);
-            listRespuesta.texto = (idioma === 'en' ? 'That time was just taken. ' : 'Esa hora acaba de ocuparse. ') + listRespuesta.texto;
+            listRespuesta.texto = (en ? 'That time was just taken. ' : 'Esa hora acaba de ocuparse. ') + listRespuesta.texto;
           } else {
             await agenda.setEstadoAgenda(telefono, { ...st, paso: 'sesion_dia' });
-            listRespuesta = listaDiasSesion(idioma, idioma === 'en' ? 'That day has no times left. Choose another day.' : 'Ese dia ya no tiene horas libres. Elige otro dia.');
+            listRespuesta = listaDiasSesion(idioma, en ? 'That day has no times left. Choose another day.' : 'Ese dia ya no tiene horas libres. Elige otro dia.');
           }
         } else {
           await agenda.setEstadoAgenda(telefono, base);
-          botonesRespuesta = { texto: (idioma === 'en' ? 'I could not book it. Reception can help you: ' : 'No pude agendarla. Recepcion te ayuda: ') + TXT_RECEPCION + '.', botones: idioma === 'en' ? ['Speak to an advisor', 'Menu'] : ['Hablar con un asesor', 'Menu'] };
+          const antes = previas.length ? (en ? 'These are booked:\n' : 'Estas quedaron agendadas:\n') + lineas(previas) + '\n\n' : '';
+          botonesRespuesta = { texto: antes + (en ? 'I could not book the next one. Reception can help you: ' : 'No pude agendar la siguiente. Recepcion te ayuda: ') + TXT_RECEPCION + '.', botones: en ? ['Speak to an advisor', 'Menu'] : ['Hablar con un asesor', 'Menu'] };
         }
+      }
+    }
+
+    // ── PASO: SIN BONO — ELEGIR QUE QUIERE ──
+    else if (st.paso === 'solicitud_bono') {
+      const s = normalizarAux(texto);
+      const bonos = BONOS[st.servicioClave] || [];
+      const m = /^bono_(\d+)$/.exec(texto);
+      const bono = m ? bonos[parseInt(m[1], 10)] : bonos.find(b => normalizarAux(b.titulo) === s);
+      if (!bono) {
+        listRespuesta = listaBonos(st.servicioClave, idioma, idioma === 'en' ? 'Please choose an option from the list.' : 'Por favor elige una opcion de la lista.');
+      } else {
+        await agenda.setEstadoAgenda(telefono, { ...st, paso: 'solicitud_detalle', bono });
+        const valoracion = st.servicioClave === 'camara' || st.servicioClave === 'paquetes'
+          ? (idioma === 'en' ? '\n\nThe hyperbaric chamber requires a prior assessment; reception will arrange it if you do not have one yet.' : '\n\nLa camara hiperbarica requiere valoracion previa; recepcion la coordina contigo si aun no la tienes.')
+          : '';
+        respuesta = (idioma === 'en'
+          ? `Great: ${bono.titulo}. Tell me which days and times work for you, for example: Tuesdays and Thursdays in the afternoon.`
+          : `Perfecto: ${bono.titulo}. Cuentame que dias y horarios te sirven, por ejemplo: martes y jueves en la tarde.`) + valoracion;
+      }
+    }
+
+    // ── PASO: SIN BONO — DISPONIBILIDAD Y SOLICITUD PARA RECEPCION ──
+    else if (st.paso === 'solicitud_detalle') {
+      const en = idioma === 'en';
+      const r = await crmInterno.solicitudSesiones({
+        leadId: st.leadId, servicio: SERVICIO_NOMBRE[st.servicioClave] || st.servicioClave,
+        bono: st.bono.titulo + ' · ' + st.bono.desc, detalle: texto.trim().slice(0, 500),
+      });
+      await agenda.setEstadoAgenda(telefono, { paso: 'menu_principal', servicioClave: st.servicioClave, leadId: st.leadId, leadNombre: st.leadNombre, email: st.email });
+      if (r.ok) {
+        botonesRespuesta = { texto: en
+          ? `Done! I left your request for ${st.bono.titulo} with reception. They will contact you to confirm the schedule and the payment.`
+          : `Listo! Deje tu solicitud de ${st.bono.titulo} con recepcion. Te contactaran para confirmar los horarios y el pago.`, botones: ['Menu'] };
+      } else {
+        botonesRespuesta = { texto: (en ? 'I could not leave your request. Reception can help you: ' : 'No pude dejar tu solicitud. Recepcion te ayuda: ') + TXT_RECEPCION + '.', botones: en ? ['Speak to an advisor', 'Menu'] : ['Hablar con un asesor', 'Menu'] };
       }
     }
 
@@ -1240,7 +1382,7 @@ async function handleIncomingMessage(message, contact, options = {}) {
     }
 
     // ═══ ENVÍO DE RESPUESTA (texto, botones o lista) ═══
-    const pasosAgenda = ['sesion_paquete','sesion_dia','sesion_hora','pedir_servicio','pedir_tipo','pedir_doctor','pedir_correo','validado','validado_nuevo','seleccionar_dia','seleccionar_hora','confirmar_cancelar','post_agendado'];
+    const pasosAgenda = ['solicitud_bono','solicitud_detalle','sesion_cantidad','sesion_paquete','sesion_dia','sesion_hora','pedir_servicio','pedir_tipo','pedir_doctor','pedir_correo','validado','validado_nuevo','seleccionar_dia','seleccionar_hora','confirmar_cancelar','post_agendado'];
     // Toda respuesta libre lleva siempre los botones: agendar, asesor y menu.
     if (respuesta && !botonesRespuesta && !listRespuesta && !pasosAgenda.includes(st.paso) && !sinBotonesLibres && intencionGlobal !== 'hablar_asesor' && !escalado) {
       botonesRespuesta = await prepararRespuestaConBotones(telefono, nombre, respuesta, idioma);

@@ -33,4 +33,8 @@ const horariosLibres = (paqueteId, fecha) => llamar('get', '/bot-interno/horario
 const agendarSesion = ({ leadId, paqueteId, fecha, hora, componente }) =>
   llamar('post', '/bot-interno/sesiones/agendar', { data: { lead_id: leadId, paquete_id: paqueteId, fecha, hora, componente: componente || null } });
 
-module.exports = { sesionesPorAgendar, horariosLibres, agendarSesion };
+// Sin paquete: deja la solicitud (servicio, bono y disponibilidad) para que recepcion confirme y cobre
+const solicitudSesiones = ({ leadId, servicio, bono, detalle }) =>
+  llamar('post', '/bot-interno/solicitudes', { data: { lead_id: leadId, servicio, bono, detalle: detalle || '' } });
+
+module.exports = { sesionesPorAgendar, horariosLibres, agendarSesion, solicitudSesiones };
