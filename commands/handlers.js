@@ -378,7 +378,10 @@ function listaBonos(clave, idioma, intro) {
   return {
     texto: intro,
     buttonLabel: en ? 'Choose pack' : 'Elegir bono',
-    sections: [{ title: en ? 'Options' : 'Opciones', rows: (BONOS[clave] || []).map((b, i) => ({ id: 'bono_' + i, title: b.titulo, description: b.desc.slice(0, 72) })) }],
+    sections: [{ title: en ? 'Options' : 'Opciones', rows: [
+      ...((clave === 'camara' || clave === 'paquetes') ? [{ id: 'valoracion', title: en ? 'Book my assessment' : 'Agendar mi valoracion', description: en ? 'Appointment with the doctor, required first' : 'Cita con el medico, es el primer paso' }] : []),
+      ...(BONOS[clave] || []).map((b, i) => ({ id: 'bono_' + i, title: b.titulo, description: b.desc.slice(0, 72) })),
+    ] }],
   };
 }
 
@@ -405,8 +408,8 @@ async function prepararSesiones({ st, lead, nombre, idioma }) {
     return {
       estado: { ...base, ...persona, paso: 'solicitud_bono' },
       lista: listaBonos(st.servicioClave, idioma, en
-        ? 'You do not have an active pack for this service yet. Choose what you would like and reception will confirm the schedule and payment with you.'
-        : 'Aun no tienes un bono activo de este servicio. Elige lo que quieres y recepcion te confirma los horarios y el pago.'),
+        ? 'You do not have an active pack for this service yet. ' + ((st.servicioClave === 'camara' || st.servicioClave === 'paquetes') ? 'The hyperbaric chamber requires a prior assessment with the doctor: book it here, or choose your pack and reception will confirm the schedule and payment.' : 'Choose what you would like and reception will confirm the schedule and payment with you.')
+        : 'Aun no tienes un bono activo de este servicio. ' + ((st.servicioClave === 'camara' || st.servicioClave === 'paquetes') ? 'La camara hiperbarica requiere valoracion previa con el medico: puedes agendarla aqui, o elegir tu bono y recepcion te confirma horarios y pago.' : 'Elige lo que quieres y recepcion te confirma los horarios y el pago.')),
     };
   }
   if (opciones.length === 1) return elegirOpcionSesion({ base, persona, opcion: opciones[0], idioma });
@@ -422,6 +425,13 @@ async function prepararSesiones({ st, lead, nombre, idioma }) {
       })) }],
     },
   };
+}
+
+// La camara exige valoracion previa: se agenda como una consulta medica (mismo flujo de consultas), conservando a la
+// persona si ya dio su correo para no volver a pedirlo.
+function empezarValoracion(st) {
+  return { paso: 'pedir_tipo', accion: 'agendar', valoracion: true,
+    ...(st.leadId ? { leadId: st.leadId, leadNombre: st.leadNombre, email: st.email } : {}) };
 }
 
 function textoDia(opcion, total, hechas, idioma) {
@@ -520,7 +530,7 @@ function esEntradaEsperada(st, texto) {
   if (!paso) return false;
   if (paso === 'pedir_correo') return esCorreoCliente(texto);
   if (paso === 'solicitud_detalle') return texto.trim().length >= 2;
-  if (paso === 'solicitud_bono') return /(sesion|bono|tren|cuerpo|intensivo|recuperacion|lesion|piernas|mantenimiento)/.test(t);
+  if (paso === 'solicitud_bono') return /(valoracion|assessment|sesion|bono|tren|cuerpo|intensivo|recuperacion|lesion|piernas|mantenimiento)/.test(t);
   if (paso === 'sesion_cantidad') return /\d/.test(t);
   if (paso === 'sesion_paquete') return /^(\s*\d+\.|opc_)/.test(t);
   if (paso === 'sesion_dia') return Boolean(extraerDiaSeleccionado(texto));
@@ -887,7 +897,11 @@ async function handleIncomingMessage(message, contact, options = {}) {
 
     // ── PASO: MENÚ PRINCIPAL ──
     else if (st.paso === 'menu_principal') {
-      if (/(agendar (otra )?sesion|book (another )?session)/.test(normalizarAux(texto))) {
+      if (/(agendar valoracion|book assessment)/.test(normalizarAux(texto))) {
+        await agenda.setEstadoAgenda(telefono, empezarValoracion(st));
+        listRespuesta = listaTiposConsulta(idioma);
+        listRespuesta.texto = (idioma === 'en' ? 'The assessment is a consultation with the doctor. ' : 'La valoracion es una consulta con el medico. ') + listRespuesta.texto;
+      } else if (/(agendar (otra )?sesion|book (another )?session)/.test(normalizarAux(texto))) {
         if (!st.servicioClave) {
           await agenda.setEstadoAgenda(telefono, { paso: 'pedir_servicio', accion: 'agendar' });
           listRespuesta = listaServicios(idioma);
@@ -947,7 +961,8 @@ async function handleIncomingMessage(message, contact, options = {}) {
     // ── PASO: ELEGIR SERVICIO (consulta, rehabilitacion, recuperacion, presoterapia, camara, paquetes) ──
     else if (st.paso === 'pedir_servicio') {
       const s = normalizarAux(texto);
-      const botonesInfo = idioma === 'en' ? ['Book session', 'Speak to an advisor', 'Menu'] : ['Agendar sesion', 'Hablar con un asesor', 'Menu'];
+      const botonesBase = idioma === 'en' ? ['Book session', 'Speak to an advisor', 'Menu'] : ['Agendar sesion', 'Hablar con un asesor', 'Menu'];
+      const botonesConValoracion = idioma === 'en' ? ['Book session', 'Book assessment', 'Menu'] : ['Agendar sesion', 'Agendar valoracion', 'Menu'];
       const clave = /(paquete|combinad|package)/.test(s) ? 'paquetes'
         : /(hiperb|camara|chamber)/.test(s) ? 'camara'
         : /(presoter|pressoth)/.test(s) ? 'presoterapia'
@@ -956,7 +971,7 @@ async function handleIncomingMessage(message, contact, options = {}) {
         : null;
       if (clave) {
         await agenda.setEstadoAgenda(telefono, { paso: 'menu_principal', servicioClave: clave });
-        botonesRespuesta = { texto: infoServicio(clave, idioma), botones: botonesInfo };
+        botonesRespuesta = { texto: infoServicio(clave, idioma), botones: (clave === 'camara' || clave === 'paquetes') ? botonesConValoracion : botonesBase };
       } else if (/(consult|medic|physician|doctor)/.test(s)) {
         await agenda.setEstadoAgenda(telefono, { ...st, paso: 'pedir_tipo' });
         listRespuesta = listaTiposConsulta(idioma);
@@ -1096,6 +1111,11 @@ async function handleIncomingMessage(message, contact, options = {}) {
     else if (st.paso === 'solicitud_bono') {
       const s = normalizarAux(texto);
       const bonos = BONOS[st.servicioClave] || [];
+      if (/(valoracion|assessment)/.test(s)) {
+        await agenda.setEstadoAgenda(telefono, empezarValoracion(st));
+        listRespuesta = listaTiposConsulta(idioma);
+        listRespuesta.texto = (idioma === 'en' ? 'The assessment is a consultation with the doctor. ' : 'La valoracion es una consulta con el medico. ') + listRespuesta.texto;
+      } else {
       const m = /^bono_(\d+)$/.exec(texto);
       const bono = m ? bonos[parseInt(m[1], 10)] : bonos.find(b => normalizarAux(b.titulo) === s);
       if (!bono) {
@@ -1108,6 +1128,7 @@ async function handleIncomingMessage(message, contact, options = {}) {
         respuesta = (idioma === 'en'
           ? `Great: ${bono.titulo}. Tell me which days and times work for you, for example: Tuesdays and Thursdays in the afternoon.`
           : `Perfecto: ${bono.titulo}. Cuentame que dias y horarios te sirven, por ejemplo: martes y jueves en la tarde.`) + valoracion;
+      }
       }
     }
 
@@ -1134,8 +1155,13 @@ async function handleIncomingMessage(message, contact, options = {}) {
       if (!selected) {
         respuesta = idioma === 'en' ? 'Please choose a physician from the list.' : 'Por favor elige un medico de la lista.';
       } else {
-        await agenda.setEstadoAgenda(telefono, { ...st, paso: 'pedir_correo', doctorId: selected.id, doctorNombre: selected.nombre });
-        respuesta = idioma === 'en' ? 'Please enter your email so I can find your patient record and appointments.' : pedirEmailIdentidad();
+        if (st.leadId && st.email) {
+          await agenda.setEstadoAgenda(telefono, { ...st, paso: 'seleccionar_dia', doctorId: selected.id, doctorNombre: selected.nombre });
+          listRespuesta = listaDiasSesion(idioma, idioma === 'en' ? 'Which day would you like your appointment?' : '📅 ¿Para qué día te gustaría agendar tu cita?');
+        } else {
+          await agenda.setEstadoAgenda(telefono, { ...st, paso: 'pedir_correo', doctorId: selected.id, doctorNombre: selected.nombre });
+          respuesta = idioma === 'en' ? 'Please enter your email so I can find your patient record and appointments.' : pedirEmailIdentidad();
+        }
       }
     }
 
@@ -1295,6 +1321,7 @@ async function handleIncomingMessage(message, contact, options = {}) {
             });
           }
           respuesta = agendado.message;
+          if (agendado.ok && st.valoracion) respuesta += idioma === 'en' ? '\n\nAfter your assessment, reception will help you with your pack and booking the chamber sessions.' : '\n\nDespues de tu valoracion, recepcion te ayuda con tu bono y a agendar las sesiones de camara.';
         } else {
           // Lead nuevo que se validó con correo
           const email = st.email;
