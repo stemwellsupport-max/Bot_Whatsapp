@@ -227,14 +227,50 @@ function menuPrincipalStemwell(nombre, idioma = 'es') {
   };
 }
 
+// ── Servicios que se pueden agendar (2026-11-04): consulta, fisioterapia y camara hiperbarica ──
+function listaServicios(idioma = 'es') {
+  const en = idioma === 'en';
+  return {
+    texto: en ? 'What would you like to book?' : 'Que deseas agendar?',
+    buttonLabel: en ? 'Choose service' : 'Elegir servicio',
+    sections: [{ title: en ? 'Services' : 'Servicios', rows: [
+      { id: 'srv_consulta', title: en ? 'Medical consultation' : 'Consulta medica', description: en ? 'Virtual or in-person' : 'Virtual o presencial' },
+      { id: 'srv_fisio', title: en ? 'Physiotherapy' : 'Fisioterapia', description: en ? 'Rehabilitation and physical therapy' : 'Rehabilitacion y terapia fisica' },
+      { id: 'srv_camara', title: en ? 'Hyperbaric chamber' : 'Camara hiperbarica', description: en ? 'Hyperbaric oxygen sessions' : 'Sesiones de oxigenacion hiperbarica' },
+    ]}],
+  };
+}
+
+function listaTiposConsulta(idioma = 'es') {
+  const en = idioma === 'en';
+  return {
+    texto: en ? 'What type of consultation would you like?' : 'Que tipo de consulta deseas?',
+    buttonLabel: en ? 'Choose type' : 'Elegir tipo',
+    sections: [{ title: en ? 'Consultations' : 'Consultas', rows: [
+      { id: 'tipo_virtual', title: en ? 'Virtual consultation' : 'Consulta virtual', description: '$50.000 COP' },
+      { id: 'tipo_presencial', title: en ? 'In-person consult' : 'Consulta presencial', description: '$80.000 COP' },
+      { id: 'tipo_medilink', title: en ? 'Book on website' : 'Agendar en la pagina', description: 'Medilink' },
+    ]}],
+  };
+}
+
+function infoFisioterapia(idioma = 'es') {
+  if (idioma === 'en') return '*Physiotherapy at Stemwell*\n\nA physiotherapist assesses you and designs your rehabilitation plan.\n- First physiotherapy consultation: COP $278,000\n- Follow-up consultation: COP $139,000\n- Rehabilitation sessions (1 or 2 times a week): COP $140,000 per session\n\nThe plan depends on your assessment; I cannot diagnose by chat. To book it, reception will arrange the day and time with you: +57 310 406 8755.';
+  return '*Fisioterapia en Stemwell*\n\nUn fisioterapeuta te valora y define tu plan de rehabilitacion.\n- Primera consulta de fisioterapia: $278.000 COP\n- Consulta de control: $139.000 COP\n- Sesiones de rehabilitacion (1 o 2 veces por semana): $140.000 COP cada una\n\nEl plan depende de tu valoracion; por chat no puedo diagnosticar. Para agendarla, recepcion coordina contigo el dia y la hora: +57 310 406 8755.';
+}
+
+function infoCamaraHiperbarica(idioma = 'es') {
+  if (idioma === 'en') return '*Hyperbaric chamber at Stemwell*\n\nSessions of oxygen breathed under pressure, within protocols defined by the medical team. Whether it is right for you depends on a medical assessment.\n- 1 session: COP $159,038\n- Pack of 3 sessions: COP $453,260\n- Pack of 4 sessions: COP $540,731\n- Pack of 10 sessions: COP $1,272,308\n\nTo book it, reception will arrange the day and time with you: +57 310 406 8755.';
+  return '*Camara hiperbarica en Stemwell*\n\nSesiones de oxigeno respirado bajo presion, dentro de protocolos definidos por el equipo medico. Que sea adecuada para ti depende de una valoracion medica.\n- 1 sesion: $159.038 COP\n- Paquete de 3 sesiones: $453.260 COP\n- Paquete de 4 sesiones: $540.731 COP\n- Paquete de 10 sesiones: $1.272.308 COP\n\nPara agendarla, recepcion coordina contigo el dia y la hora: +57 310 406 8755.';
+}
+
 function informacionStemwell(idioma = 'es') {
-  if (idioma === 'en') return 'Stemwell is a regenerative medicine clinic in Bogota. We provide responsible information about our procedures without diagnosing by chat. A physician must assess every individual case.\n\nFree medical advisory call: COP $0\nVirtual consultation: COP $50,000\nIn-person consultation: COP $80,000\n\nReception: +57 310 406 8755';
-  return 'Stemwell es una clinica de medicina regenerativa en Bogota. Podemos orientarte sobre nuestros procedimientos sin diagnosticar por chat; cada caso debe ser valorado por un medico.\n\nConsultoria con el medico: sin costo\nConsulta virtual: $50.000 COP\nConsulta presencial: $80.000 COP\n\nRecepcion: +57 310 406 8755';
+  if (idioma === 'en') return 'Stemwell is a regenerative medicine clinic in Bogota. We provide responsible information about our procedures without diagnosing by chat. A physician must assess every individual case.\n\nVirtual consultation: COP $50,000\nIn-person consultation: COP $80,000\nPhysiotherapy and hyperbaric chamber are also available: choose Book appointment to see them.\n\nReception: +57 310 406 8755';
+  return 'Stemwell es una clinica de medicina regenerativa en Bogota. Podemos orientarte sobre nuestros procedimientos sin diagnosticar por chat; cada caso debe ser valorado por un medico.\n\nConsulta virtual: $50.000 COP\nConsulta presencial: $80.000 COP\nTambien tenemos fisioterapia y camara hiperbarica: elige Agendar cita para verlas.\n\nRecepcion: +57 310 406 8755';
 }
 
 function confirmacionCita(nombre, fecha, hora, tipoConsulta, idioma = 'es') {
-  const tipo = tipoConsulta || 'Consultoria sin costo';
-  const consultoria = normalizarAux(tipo).includes('consultoria');
+  const tipo = tipoConsulta || 'Consulta presencial - $80.000 COP';
   const virtual = normalizarAux(tipo).includes('virtual');
   const presencial = normalizarAux(tipo).includes('presencial');
   const precio = virtual ? '$50.000 COP' : presencial ? '$80.000 COP' : 'sin costo';
@@ -242,12 +278,6 @@ function confirmacionCita(nombre, fecha, hora, tipoConsulta, idioma = 'es') {
   const fechaTexto = idioma === 'en'
     ? new Date(fecha).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
     : formatearFecha(new Date(fecha));
-  if (consultoria && idioma === 'en') {
-    return `Hello ${nombre || 'patient'}, your free phone advisory call with a Stemwell physician is scheduled for ${fechaTexto} at ${hora}.\n\nThe physician will call you at this WhatsApp number. You do not need to come to the clinic.`;
-  }
-  if (consultoria) {
-    return `Hola ${nombre || 'paciente'}, confirmamos tu consultoria telefonica sin costo con un medico de Stemwell para el ${fechaTexto} a las ${hora}.\n\nEl medico te llamara a este mismo numero de WhatsApp. No necesitas venir a la clinica.`;
-  }
   if (virtual && idioma === 'en') {
     return `Hello ${nombre || 'patient'}, your virtual consultation is scheduled for ${fechaTexto} at ${hora}. Price: ${precio}.${pago}\n\nYou will receive the connection details through WhatsApp. Please have your laboratory tests, diagnostic images and medical history available.`;
   }
@@ -311,6 +341,8 @@ function esEntradaEsperada(st, texto) {
   const t = normalizarAux(texto);
   if (!paso) return false;
   if (paso === 'pedir_correo') return esCorreoCliente(texto);
+  if (paso === 'pedir_servicio') return /(srv_|consulta|consult|fisio|physio|hiperb|camara|chamber)/.test(t);
+  // 'consultoria|advisory': listas viejas que aun la ofrecian; se tratan como entrada esperada para volver a preguntar el tipo.
   if (paso === 'pedir_tipo') return /(consultoria|advisory|virtual|presencial|in-person|pagina|website|medilink)/.test(t);
   if (paso === 'pedir_doctor') return (st.doctores || []).some(d => t.includes(normalizarAux(d.nombre)) || t === 'doctor_' + d.id);
   if (paso === 'seleccionar_dia') return Boolean(extraerDiaSeleccionado(texto));
@@ -326,8 +358,8 @@ function respuestaMedicaSegura(texto, idioma = 'es') {
   const en = idioma === 'en';
   if (/(foto\s*biomod|photo.?biomod|laser).*(cuanto|vale|precio|costo|cost|price|how much)|(cuanto|vale|precio|costo|cost|price|how much).*(foto\s*biomod|photo.?biomod|laser)/.test(t)) {
     return en
-      ? 'I do not have a registered price for photobiomodulation, so I should not invent one. Reception can confirm the current price at +57 310 406 8755. The only free service is the physician advisory phone call; the virtual medical consultation costs COP $50,000 and the in-person medical consultation costs COP $80,000.'
-      : 'No tengo registrado el precio de la fotobiomodulacion, por lo que no debo inventarlo. Recepcion puede confirmar el valor vigente en el +57 310 406 8755. Lo unico sin costo es la consultoria telefonica con el medico; la consulta medica virtual cuesta $50.000 COP y la presencial $80.000 COP.';
+      ? 'I do not have a registered price for photobiomodulation, so I should not invent one. Reception can confirm the current price at +57 310 406 8755. The virtual medical consultation costs COP $50,000 and the in-person medical consultation costs COP $80,000.'
+      : 'No tengo registrado el precio de la fotobiomodulacion, por lo que no debo inventarlo. Recepcion puede confirmar el valor vigente en el +57 310 406 8755. La consulta medica virtual cuesta $50.000 COP y la presencial $80.000 COP.';
   }
   if (/\b(cancer|canceroso|tumor|oncolog)/.test(t)) {
     return en
@@ -395,6 +427,7 @@ function pistaParaRetomar(st, idioma = 'es') {
   if (!paso || paso === 'menu_principal') return '';
   const en = idioma === 'en';
   const pistas = {
+    pedir_servicio: en ? 'When you are ready, choose the service from the previous list.' : 'Cuando quieras continuar, elige el servicio de la lista anterior.',
     pedir_tipo: en ? 'When you are ready, choose the appointment type from the previous list.' : 'Cuando quieras continuar, elige el tipo de cita de la lista anterior.',
     pedir_doctor: en ? 'When you are ready, choose a physician from the previous list.' : 'Cuando quieras continuar, elige un medico de la lista anterior.',
     pedir_correo: en ? 'To continue, send the email used for your Stemwell record.' : 'Para continuar, escribe el correo usado en tu registro de Stemwell.',
@@ -466,7 +499,7 @@ async function registrarLeadNuevo({ nombre, telefono, email, fecha, hora, doctor
       hora: hora,
       email: email || '',
       doctorId: doctorId || null,
-      tipoConsulta: tipoConsulta || 'Consultoria sin costo',
+      tipoConsulta: tipoConsulta || 'Consulta presencial - $80.000 COP',
       notas: 'Cita agendada por bot de WhatsApp - actualizar en Medilink.',
     });
     return { ok: true, leadId: leadId, nombre: nombre };
@@ -664,17 +697,8 @@ async function handleIncomingMessage(message, contact, options = {}) {
     // ── PASO: MENÚ PRINCIPAL ──
     else if (st.paso === 'menu_principal') {
       if (texto.includes('📅 Agendar') || intencionGlobal === 'agendar_cita') {
-        await agenda.setEstadoAgenda(telefono, { paso: 'pedir_tipo', accion: 'agendar' });
-        listRespuesta = {
-          texto: idioma === 'en' ? 'What would you like to book?' : 'Que deseas agendar?',
-          buttonLabel: idioma === 'en' ? 'Choose service' : 'Elegir servicio',
-          sections: [{ title: idioma === 'en' ? 'Appointments' : 'Citas', rows: [
-            { id: 'tipo_consultoria', title: idioma === 'en' ? 'Free advisory call' : 'Consultoria sin costo', description: idioma === 'en' ? 'Call with a physician - free' : 'Llamada con un medico - sin costo' },
-            { id: 'tipo_virtual', title: idioma === 'en' ? 'Virtual consultation' : 'Consulta virtual', description: '$50.000 COP' },
-            { id: 'tipo_presencial', title: idioma === 'en' ? 'In-person consult' : 'Consulta presencial', description: '$80.000 COP' },
-            { id: 'tipo_medilink', title: idioma === 'en' ? 'Book on website' : 'Agendar en la pagina', description: 'Medilink' },
-          ]}],
-        };
+        await agenda.setEstadoAgenda(telefono, { paso: 'pedir_servicio', accion: 'agendar' });
+        listRespuesta = listaServicios(idioma);
       } else if (texto.includes('🔄 Reagendar') || intencionGlobal === 'reagendar_cita') {
         await agenda.setEstadoAgenda(telefono, { paso: 'pedir_correo', accion: 'reagendar' });
         respuesta = pedirEmailIdentidad();
@@ -716,6 +740,24 @@ async function handleIncomingMessage(message, contact, options = {}) {
       }
     }
 
+    // ── PASO: ELEGIR SERVICIO (consulta, fisioterapia o camara hiperbarica) ──
+    else if (st.paso === 'pedir_servicio') {
+      const s = normalizarAux(texto);
+      const botonesInfo = idioma === 'en' ? ['Speak to an advisor', 'Book appointment', 'Menu'] : ['Hablar con un asesor', 'Agendar cita', 'Menu'];
+      if (/(fisio|physio)/.test(s)) {
+        await agenda.setEstadoAgenda(telefono, { paso: 'menu_principal' });
+        botonesRespuesta = { texto: infoFisioterapia(idioma), botones: botonesInfo };
+      } else if (/(hiperb|camara|chamber)/.test(s)) {
+        await agenda.setEstadoAgenda(telefono, { paso: 'menu_principal' });
+        botonesRespuesta = { texto: infoCamaraHiperbarica(idioma), botones: botonesInfo };
+      } else if (/(consult|medic|physician|doctor)/.test(s)) {
+        await agenda.setEstadoAgenda(telefono, { ...st, paso: 'pedir_tipo' });
+        listRespuesta = listaTiposConsulta(idioma);
+      } else {
+        listRespuesta = listaServicios(idioma);
+      }
+    }
+
     // ── PASO: ELEGIR TIPO DE CITA ──
     else if (st.paso === 'pedir_tipo') {
       const typeText = normalizarAux(texto);
@@ -725,7 +767,11 @@ async function handleIncomingMessage(message, contact, options = {}) {
       } else {
         const tipoConsulta = typeText.includes('virtual') ? 'Consulta virtual - $50.000 COP'
           : (typeText.includes('presencial') || typeText.includes('in-person')) ? 'Consulta presencial - $80.000 COP'
-          : 'Consultoria sin costo';
+          : null;
+        if (!tipoConsulta) {
+          // Una lista vieja (con la consultoria que ya no existe) o un texto que no es de la lista: se vuelve a preguntar.
+          listRespuesta = listaTiposConsulta(idioma);
+        } else {
         const doctores = await getDoctoresActivos().catch(() => []);
         if (doctores.length) {
           await agenda.setEstadoAgenda(telefono, { ...st, paso: 'pedir_doctor', tipoConsulta, doctores });
@@ -737,6 +783,7 @@ async function handleIncomingMessage(message, contact, options = {}) {
         } else {
           await agenda.setEstadoAgenda(telefono, { ...st, paso: 'pedir_correo', tipoConsulta });
           respuesta = idioma === 'en' ? 'Please enter your email so I can find your patient record and appointments.' : pedirEmailIdentidad();
+        }
         }
       }
     }
@@ -897,7 +944,7 @@ async function handleIncomingMessage(message, contact, options = {}) {
                 leadId: st.leadId,
                 fecha,
                 hora,
-                tipoConsulta: st.tipoConsulta || 'Consultoria sin costo',
+                tipoConsulta: st.tipoConsulta || 'Consulta presencial - $80.000 COP',
                 doctorId: st.doctorId || null,
                 doctorNombre: st.doctorNombre || '',
               },
@@ -925,7 +972,7 @@ async function handleIncomingMessage(message, contact, options = {}) {
                 leadId: reg.leadId,
                 fecha,
                 hora,
-                tipoConsulta: st.tipoConsulta || 'Consultoria sin costo',
+                tipoConsulta: st.tipoConsulta || 'Consulta presencial - $80.000 COP',
                 doctorId: st.doctorId || null,
                 doctorNombre: st.doctorNombre || '',
               },
@@ -978,7 +1025,7 @@ async function handleIncomingMessage(message, contact, options = {}) {
           await agenda.setEstadoAgenda(telefono, { paso: 'menu_principal' });
           botonesRespuesta = menuPrincipalStemwell(nombre, idioma);
         } else if (intencion === 'hablar_asesor') {
-          respuesta = '¡Entendido! Un asesor de Stemwell te atenderá con gusto. 🙋\n\n📞 Escríbenos o llámanos al *+57 310 406 8755*\n💬 O agenda tu consultoria telefonica sin costo con el medico: ' + AGENDA_URL + '\n\nUn asesor se comunicará contigo pronto.';
+          respuesta = '¡Entendido! Un asesor de Stemwell te atenderá con gusto. 🙋\n\n📞 Escríbenos o llámanos al *+57 310 406 8755*\n\nUn asesor se comunicará contigo pronto.';
         } else {
           // Si no es flujo, usar IA
           respuesta = await responderConIA(texto, nombre, telefono, idioma, sendMessage);
@@ -991,7 +1038,7 @@ async function handleIncomingMessage(message, contact, options = {}) {
     }
 
     // ═══ ENVÍO DE RESPUESTA (texto, botones o lista) ═══
-    const pasosAgenda = ['pedir_tipo','pedir_doctor','pedir_correo','validado','validado_nuevo','seleccionar_dia','seleccionar_hora','confirmar_cancelar','post_agendado'];
+    const pasosAgenda = ['pedir_servicio','pedir_tipo','pedir_doctor','pedir_correo','validado','validado_nuevo','seleccionar_dia','seleccionar_hora','confirmar_cancelar','post_agendado'];
     // Toda respuesta libre lleva siempre los botones: agendar, asesor y menu.
     if (respuesta && !botonesRespuesta && !listRespuesta && !pasosAgenda.includes(st.paso) && intencionGlobal !== 'hablar_asesor' && !escalado) {
       botonesRespuesta = await prepararRespuestaConBotones(telefono, nombre, respuesta, idioma);
@@ -1028,7 +1075,7 @@ async function agendaReal(st, fecha, hora, nombre, telefono, idioma = 'es') {
       hora,
       email: st.email || '',
       doctorId: st.doctorId || lead.doctor_id || undefined,
-      tipoConsulta: st.tipoConsulta || 'Consultoria sin costo',
+      tipoConsulta: st.tipoConsulta || 'Consulta presencial - $80.000 COP',
       notas: 'Cita ' + (st.esReagenda ? 'REAGENDADA' : 'AGENDADA') + ' por bot de WhatsApp - actualizar en Medilink.',
     });
     return { ok: true, message: confirmacionCita(lead.nombre || nombre, fecha, hora, st.tipoConsulta, idioma) };
