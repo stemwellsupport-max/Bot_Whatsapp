@@ -286,6 +286,7 @@ function infoServicio(clave, idioma = 'es') {
 // Si la persona no tiene el bono, elige cuantas sesiones/que bono quiere y el bot deja una SOLICITUD para recepcion
 // (no vende, no crea paquetes ni cobros).
 const TXT_RECEPCION = '+57 310 406 8755';
+const MEDICO_VALORACION = 'gustavo castro';   // quien hace la valoracion previa de la camara (coincide con el nombre en usuarios)
 
 const SERVICIO_NOMBRE = {
   rehab: 'Rehabilitacion', recuperacion: 'Recuperacion y descarga muscular', presoterapia: 'Presoterapia',
@@ -994,8 +995,20 @@ async function handleIncomingMessage(message, contact, options = {}) {
           // Una lista vieja (con la consultoria que ya no existe) o un texto que no es de la lista: se vuelve a preguntar.
           listRespuesta = listaTiposConsulta(idioma);
         } else {
-        const doctores = await getDoctoresActivos().catch(() => []);
-        if (doctores.length) {
+        let doctores = await getDoctoresActivos().catch(() => []);
+        const soloGustavo = st.valoracion ? doctores.filter(d => normalizarAux(d.nombre).includes(MEDICO_VALORACION)) : [];
+        if (soloGustavo.length === 1) {
+          // La valoracion previa de la camara la hace solo el Dr. Gustavo Castro: no se pregunta el medico.
+          const sel = soloGustavo[0];
+          const intro = idioma === 'en' ? `Your assessment will be with ${sel.nombre}. ` : `Tu valoracion sera con ${sel.nombre}. `;
+          if (st.leadId && st.email) {
+            await agenda.setEstadoAgenda(telefono, { ...st, paso: 'seleccionar_dia', tipoConsulta, doctorId: sel.id, doctorNombre: sel.nombre });
+            listRespuesta = listaDiasSesion(idioma, intro + (idioma === 'en' ? 'Which day would you like?' : '📅 ¿Para qué día te gustaría agendar?'));
+          } else {
+            await agenda.setEstadoAgenda(telefono, { ...st, paso: 'pedir_correo', tipoConsulta, doctorId: sel.id, doctorNombre: sel.nombre });
+            respuesta = intro + '\n\n' + (idioma === 'en' ? 'Please enter your email so I can find your patient record and appointments.' : pedirEmailIdentidad());
+          }
+        } else if (doctores.length) {
           await agenda.setEstadoAgenda(telefono, { ...st, paso: 'pedir_doctor', tipoConsulta, doctores });
           listRespuesta = {
             texto: idioma === 'en' ? 'Choose the physician for your appointment.' : 'Elige el medico para tu cita.',
