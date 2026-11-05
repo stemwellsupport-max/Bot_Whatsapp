@@ -52,7 +52,7 @@ process.on('unhandledRejection', (reason) => {
 // El bot está detrás de un solo proxy (el túnel ngrok). Con esto req.ip es la IP
 // real del paciente (la que ngrok anota) y no la del túnel; se usa para limitar
 // envíos repetidos en las encuestas.
-app.set('trust proxy', 1);
+app.set('trust proxy', Number(process.env.TRUST_PROXY || 1));   // en la nube: Cloudflare + Caddy = 2
 
 // ============================================
 // CONTRASEÑA DEL MÓDULO PRINCIPAL (ver services/acceso.js)
@@ -89,7 +89,7 @@ app.get('/consentimiento/verificar-politica', async (req, res) => {
     port: parseInt(process.env.PG_PORT || '5432'),
     database: process.env.PG_DATABASE || 'stemwell',
     user: process.env.PG_USER || 'crm_user',
-    password: process.env.PG_PASSWORD || 'crm2024',
+    password: process.env.PG_PASSWORD,
   });
 
   try {
@@ -218,7 +218,7 @@ app.post('/consentimiento/guardar', async (req, res) => {
     port: parseInt(process.env.PG_PORT || '5432'),
     database: process.env.PG_DATABASE || 'stemwell',
     user: process.env.PG_USER || 'crm_user',
-    password: process.env.PG_PASSWORD || 'crm2024',
+    password: process.env.PG_PASSWORD,
   });
   const client = await pool.connect();
 
@@ -346,7 +346,7 @@ app.post('/consentimiento/encuesta/guardar', async (req, res) => {
     port: parseInt(process.env.PG_PORT || '5432'),
     database: process.env.PG_DATABASE || 'stemwell',
     user: process.env.PG_USER || 'crm_user',
-    password: process.env.PG_PASSWORD || 'crm2024',
+    password: process.env.PG_PASSWORD,
   });
 
   try {
@@ -444,7 +444,7 @@ app.post('/consentimiento/calificacion/guardar', async (req, res) => {
     port: parseInt(process.env.PG_PORT || '5432'),
     database: process.env.PG_DATABASE || 'stemwell',
     user: process.env.PG_USER || 'crm_user',
-    password: process.env.PG_PASSWORD || 'crm2024',
+    password: process.env.PG_PASSWORD,
   });
 
   try {
@@ -513,32 +513,102 @@ app.post('/consentimiento/registro/guardar', async (req, res) => {
     port: parseInt(process.env.PG_PORT || '5432'),
     database: process.env.PG_DATABASE || 'stemwell',
     user: process.env.PG_USER || 'crm_user',
-    password: process.env.PG_PASSWORD || 'crm2024',
+    password: process.env.PG_PASSWORD,
   });
 
   try {
     const {
       idioma, fecha, nombre, documento, rh, motivo_visita, eps,
-      contacto_emergencia, telefono, hora_ingreso, hora_salida, firma_img, user_agent
+      contacto_emergencia, telefono, hora_ingreso, hora_salida, firma_img, user_agent, evento_token
     } = req.body;
+    let documentoFinal = (documento || '').toString().trim();
+    const citaId = parseInt(req.body.cita_id, 10) || null;
 
-    if (!fecha || !nombre || !documento || !motivo_visita || !contacto_emergencia || !telefono || !firma_img) {
+    if (!fecha || !nombre || !documentoFinal || !motivo_visita || !contacto_emergencia || !telefono || !firma_img) {
       return res.status(400).json({ mensaje: 'Faltan campos obligatorios.' });
     }
 
-    await pool.query(
+    // Si el paciente eligió su cita de hoy, el documento viene enmascarado («•••• 890»): la planilla nunca recibe el
+    // número completo en pantalla, así que se toma de la ficha del CRM. Si lo escribió él, se respeta lo escrito.
+    let citaCrm = null;
+    if (citaId) {
+      const c = await pool.query(
+        `SELECT c.id, c.lead_id, l.numero_documento
+         FROM citas c JOIN leads l ON l.id = c.lead_id
+         WHERE c.id = $1 AND c.fecha_cita = (NOW() AT TIME ZONE 'America/Bogota')::date`, [citaId]);
+      citaCrm = c.rows[0] || null;
+      if (documentoFinal.includes('•')) {
+        if (!citaCrm || !citaCrm.numero_documento) {
+          return res.status(400).json({ mensaje: 'No encontramos tu documento. Escríbelo para continuar.' });
+        }
+        documentoFinal = citaCrm.numero_documento;
+      }
+    }
+
+    const ins = await pool.query(
       `INSERT INTO registro_visitantes
         (fecha, nombre, documento, rh, motivo_visita, eps, contacto_emergencia, telefono,
-         hora_ingreso, hora_salida, firma_img, idioma, user_agent)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+         hora_ingreso, hora_salida, firma_img, idioma, user_agent, cita_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+       RETURNING id`,
       [
-        fecha, nombre.trim(), documento.trim(), rh || '', motivo_visita.trim(), (eps || '').trim(),
+        fecha, nombre.trim(), documentoFinal, rh || '', motivo_visita.trim(), (eps || '').trim(),
         contacto_emergencia.trim(), telefono.trim(), hora_ingreso || '', hora_salida || '',
-        firma_img, idioma === 'en' ? 'en' : 'es', user_agent || ''
+        firma_img, idioma === 'en' ? 'en' : 'es', user_agent || '', citaCrm ? citaCrm.id : null
       ]
     );
 
-    console.log(`✅ Registro de visitante guardado: ${nombre} (${documento})`);
+    console.log(`✅ Registro de visitante guardado: ${nombre} (${documentoFinal})`);
+
+    // Planilla ↔ CRM: si el visitante es un paciente con cita hoy, queda marcada su llegada en Front desk y lo que
+    // escribió (documento, EPS) se guarda para que la hoja de admisión de Recepción se abra ya con esos datos.
+    // Un fallo aquí nunca debe perder la planilla ya guardada.
+    if (citaCrm) {
+      try {
+        await pool.query(
+          `UPDATE citas SET llegada_origen = CASE WHEN llegada_en IS NULL THEN 'planilla' ELSE llegada_origen END,
+                            llegada_en = COALESCE(llegada_en, NOW())
+           WHERE id = $1`, [citaCrm.id]);
+        const datos = { numero_documento: documentoFinal.replace(/[\s.\-]/g, '').toUpperCase() };
+        if ((eps || '').trim()) datos.eps = (eps || '').trim();
+        await pool.query(
+          `INSERT INTO registros_tableta (cita_id, lead_id, datos, autoriza_datos, ip)
+           SELECT c.id, c.lead_id, $1::jsonb, TRUE, 'planilla'
+           FROM citas c
+           WHERE c.lead_id = $2 AND c.fecha_cita = (NOW() AT TIME ZONE 'America/Bogota')::date
+           ON CONFLICT (cita_id) DO UPDATE SET datos = registros_tableta.datos || EXCLUDED.datos,
+                autoriza_datos = TRUE, actualizado_en = NOW()`,
+          [JSON.stringify(datos), citaCrm.lead_id]);
+        // Ficha del paciente: lo que la ficha NO tenía se llena de una vez (documento y EPS). Nunca se pisa lo que
+        // ya tiene, y un documento que ya pertenece a otra ficha no se asigna (Recepción lo resuelve en la hoja).
+        const dup = await pool.query(
+          `SELECT 1 FROM leads WHERE numero_documento = $1::text AND id <> $2 LIMIT 1`, [datos.numero_documento, citaCrm.lead_id]);
+        await pool.query(
+          `UPDATE leads SET
+             numero_documento = CASE WHEN COALESCE(numero_documento, '') = '' AND $3::boolean THEN $1::text ELSE numero_documento END,
+             eps = CASE WHEN COALESCE(eps, '') = '' THEN NULLIF($4::text, '') ELSE eps END
+           WHERE id = $2`,
+          [datos.numero_documento, citaCrm.lead_id, dup.rowCount === 0, datos.eps || '']);
+        console.log(`📲 Llegada marcada en el CRM desde la planilla: cita #${citaCrm.id}`);
+      } catch (e) {
+        console.error('⚠️ No se pudo marcar la llegada en el CRM:', e.message);
+      }
+    }
+
+    // Si vino del QR del correo del evento: marca la asistencia en el CRM (check-in).
+    // Un fallo aquí nunca debe perder la planilla ya guardada.
+    if (typeof evento_token === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(evento_token)) {
+      try {
+        const upd = await pool.query(
+          `UPDATE evento_registros SET asistio = TRUE, asistio_en = COALESCE(asistio_en, CURRENT_TIMESTAMP),
+               planilla_firmada_en = COALESCE(planilla_firmada_en, CURRENT_TIMESTAMP)
+           WHERE token = $1 AND estado = 'confirmado'`, [evento_token]
+        );
+        console.log(`🎟️ Check-in de evento por planilla: ${upd.rowCount} registro(s) marcado(s)`);
+      } catch (e) {
+        console.error('⚠️ No se pudo marcar la asistencia del evento:', e.message);
+      }
+    }
     res.json({ mensaje: 'Registro guardado exitosamente' });
 
   } catch (err) {
@@ -546,6 +616,174 @@ app.post('/consentimiento/registro/guardar', async (req, res) => {
     res.status(500).json({ mensaje: 'Error interno del servidor', error: err.message });
   } finally {
     await pool.end();
+  }
+});
+
+// ============================================
+// RUTA: DATOS DEL REGISTRO DE UN EVENTO (QR del correo "Asistencia confirmada")
+// El QR solo lleva un código secreto; los datos se leen aquí y se devuelven solo
+// los que la planilla necesita. Solo para registros confirmados.
+// ============================================
+app.get('/consentimiento/registro/evento/:token', async (req, res) => {
+  const token = String(req.params.token || '');
+  if (!/^[A-Za-z0-9_-]{8,64}$/.test(token)) return res.status(404).json({ mensaje: 'Código no válido' });
+  const pool = new Pool({
+    host: process.env.PG_HOST || 'localhost',
+    port: parseInt(process.env.PG_PORT || '5432'),
+    database: process.env.PG_DATABASE || 'stemwell',
+    user: process.env.PG_USER || 'crm_user',
+    password: process.env.PG_PASSWORD,
+  });
+  try {
+    const r = await pool.query(
+      `SELECT r.nombre, r.cedula, r.rh, r.eps, r.contacto_emergencia, r.telefono_emergencia, r.asistio,
+              r.grabacion_decision, r.servicios, e.nombre AS evento
+       FROM evento_registros r JOIN eventos e ON e.id = r.evento_id
+       WHERE r.token = $1 AND r.estado = 'confirmado'`, [token]
+    );
+    if (!r.rows.length) return res.status(404).json({ mensaje: 'No encontramos tu registro confirmado' });
+    res.set('Cache-Control', 'no-store');
+    res.json(r.rows[0]);
+  } catch (err) {
+    console.error('❌ Error leyendo registro de evento:', err);
+    res.status(500).json({ mensaje: 'Error interno del servidor' });
+  } finally {
+    await pool.end();
+  }
+});
+
+// ============================================
+// RUTA: DECISIÓN DE GRABACIÓN (puerta del evento)
+// La persona dice si desea ser grabada; si sí, lee y firma el documento en la tablet.
+// La firma queda guardada junto al registro del evento. Es opcional: "no" también se guarda.
+// ============================================
+app.post('/consentimiento/registro/evento/:token/grabacion', async (req, res) => {
+  const token = String(req.params.token || '');
+  if (!/^[A-Za-z0-9_-]{8,64}$/.test(token)) return res.status(404).json({ mensaje: 'Código no válido' });
+  const decision = req.body && req.body.decision === 'si' ? 'si' : (req.body && req.body.decision === 'no' ? 'no' : null);
+  const firma = req.body && typeof req.body.firma_img === 'string' ? req.body.firma_img : '';
+  if (!decision) return res.status(400).json({ mensaje: 'Falta la decisión' });
+  if (decision === 'si' && !/^data:image\/png;base64,[A-Za-z0-9+\/=]{200,}$/.test(firma)) {
+    return res.status(400).json({ mensaje: 'Falta la firma' });
+  }
+  const pool = new Pool({
+    host: process.env.PG_HOST || 'localhost',
+    port: parseInt(process.env.PG_PORT || '5432'),
+    database: process.env.PG_DATABASE || 'stemwell',
+    user: process.env.PG_USER || 'crm_user',
+    password: process.env.PG_PASSWORD,
+  });
+  try {
+    const r = await pool.query(
+      `UPDATE evento_registros
+          SET grabacion_decision = $2::varchar,
+              grabacion_firma_img = $3::text,
+              grabacion_firmada_en = CASE WHEN $2::varchar = 'si' THEN CURRENT_TIMESTAMP ELSE NULL END,
+              autoriza_grabacion = ($2::varchar = 'si')
+        WHERE token = $1 AND estado = 'confirmado'`,
+      [token, decision, decision === 'si' ? firma : null]
+    );
+    if (!r.rowCount) return res.status(404).json({ mensaje: 'No encontramos tu registro confirmado' });
+    console.log(`🎥 Decisión de grabación (${decision}) guardada para un registro del evento`);
+    res.json({ mensaje: 'Guardado' });
+  } catch (err) {
+    console.error('❌ Error guardando decisión de grabación:', err);
+    res.status(500).json({ mensaje: 'Error interno del servidor' });
+  } finally {
+    await pool.end();
+  }
+});
+
+// ============================================
+// RUTAS: SERVICIOS QUE LA PERSONA DESEA HACERSE (puerta del evento)
+// GET: lista los servicios con cupo disponible (y los que ya eligió). POST: guarda la elección
+// respetando los cupos del evento (con el evento bloqueado para que dos tablets no se pisen).
+// ============================================
+function poolEvento() {
+  return new Pool({
+    host: process.env.PG_HOST || 'localhost',
+    port: parseInt(process.env.PG_PORT || '5432'),
+    database: process.env.PG_DATABASE || 'stemwell',
+    user: process.env.PG_USER || 'crm_user',
+    password: process.env.PG_PASSWORD,
+  });
+}
+
+async function serviciosDelRegistro(cl, token) {
+  const reg = (await cl.query(
+    `SELECT id, evento_id, servicios FROM evento_registros WHERE token = $1 AND estado = 'confirmado'`, [token])).rows[0];
+  if (!reg) return null;
+  const ev = (await cl.query(`SELECT servicios FROM eventos WHERE id = $1`, [reg.evento_id])).rows[0];
+  const elegidos = Array.isArray(reg.servicios) ? reg.servicios : [];
+  const lista = [];
+  for (const sv of (ev && Array.isArray(ev.servicios) ? ev.servicios : [])) {
+    if (!sv || !sv.clave) continue;
+    const usados = parseInt((await cl.query(
+      `SELECT COUNT(*) AS n FROM evento_registros
+        WHERE evento_id = $1 AND estado IN ('registrado','confirmado') AND servicios ? $2::text`,
+      [reg.evento_id, String(sv.clave)])).rows[0].n, 10);
+    const cupo = (sv.cupo === null || sv.cupo === undefined || sv.cupo === '') ? null : parseInt(sv.cupo, 10);
+    lista.push({
+      clave: String(sv.clave), nombre: sv.nombre || sv.clave, detalle: sv.detalle || '',
+      restantes: cupo === null ? null : Math.max(cupo - usados, 0),
+      seleccionado: elegidos.includes(String(sv.clave)),
+    });
+  }
+  return { reg, lista };
+}
+
+app.get('/consentimiento/registro/evento/:token/servicios', async (req, res) => {
+  const token = String(req.params.token || '');
+  if (!/^[A-Za-z0-9_-]{8,64}$/.test(token)) return res.status(404).json({ mensaje: 'Código no válido' });
+  const pool = poolEvento();
+  const cl = await pool.connect();
+  try {
+    const r = await serviciosDelRegistro(cl, token);
+    if (!r) return res.status(404).json({ mensaje: 'No encontramos tu registro confirmado' });
+    res.set('Cache-Control', 'no-store');
+    // Solo se ofrecen los que tienen cupo (o los que la persona ya había elegido).
+    res.json({ servicios: r.lista.filter(x => x.seleccionado || x.restantes === null || x.restantes > 0) });
+  } catch (err) {
+    console.error('❌ Error leyendo servicios del evento:', err);
+    res.status(500).json({ mensaje: 'Error interno del servidor' });
+  } finally {
+    cl.release(); await pool.end();
+  }
+});
+
+app.post('/consentimiento/registro/evento/:token/servicios', async (req, res) => {
+  const token = String(req.params.token || '');
+  if (!/^[A-Za-z0-9_-]{8,64}$/.test(token)) return res.status(404).json({ mensaje: 'Código no válido' });
+  const pedidos = Array.isArray(req.body && req.body.servicios) ? req.body.servicios.map(String).slice(0, 6) : [];
+  const pool = poolEvento();
+  const cl = await pool.connect();
+  try {
+    await cl.query('BEGIN');
+    const previo = (await cl.query(`SELECT evento_id FROM evento_registros WHERE token = $1 AND estado = 'confirmado'`, [token])).rows[0];
+    if (!previo) { await cl.query('ROLLBACK'); return res.status(404).json({ mensaje: 'No encontramos tu registro confirmado' }); }
+    await cl.query(`SELECT id FROM eventos WHERE id = $1 FOR UPDATE`, [previo.evento_id]);
+    const r = await serviciosDelRegistro(cl, token);
+    const porClave = Object.fromEntries(r.lista.map(x => [x.clave, x]));
+    const nuevos = [];
+    for (const clave of [...new Set(pedidos)]) {
+      const sv = porClave[clave];
+      if (!sv) continue;
+      if (!sv.seleccionado && sv.restantes !== null && sv.restantes <= 0) {
+        await cl.query('ROLLBACK');
+        return res.status(409).json({ mensaje: `Ya no quedan cupos de «${sv.nombre}». Elija otra opción.` });
+      }
+      nuevos.push(clave);
+    }
+    await cl.query(`UPDATE evento_registros SET servicios = $2::jsonb WHERE token = $1`, [token, JSON.stringify(nuevos)]);
+    await cl.query('COMMIT');
+    console.log(`🧖 Servicios del evento guardados (${nuevos.length})`);
+    res.json({ servicios: nuevos });
+  } catch (err) {
+    try { await cl.query('ROLLBACK'); } catch (_) {}
+    console.error('❌ Error guardando servicios del evento:', err);
+    res.status(500).json({ mensaje: 'Error interno del servidor' });
+  } finally {
+    cl.release(); await pool.end();
   }
 });
 
@@ -560,7 +798,7 @@ app.get('/consentimiento/registro/visitantes-previos', async (req, res) => {
     port: parseInt(process.env.PG_PORT || '5432'),
     database: process.env.PG_DATABASE || 'stemwell',
     user: process.env.PG_USER || 'crm_user',
-    password: process.env.PG_PASSWORD || 'crm2024',
+    password: process.env.PG_PASSWORD,
   });
 
   try {
@@ -585,6 +823,62 @@ app.get('/consentimiento/registro/visitantes-previos', async (req, res) => {
 });
 
 // ============================================
+// RUTA: CITAS DE HOY DEL CRM (para que el paciente se reconozca al escribir su nombre en la planilla)
+// Solo nombre, hora, motivo y EPS; el documento sale enmascarado y la planilla nunca lo recibe completo.
+// ============================================
+const _citasHoyIntentos = {};
+app.get('/consentimiento/registro/citas-hoy', async (req, res) => {
+  const ip = (req.headers['x-forwarded-for'] || req.ip || '?').toString().split(',')[0].trim();
+  const ahora = Date.now();
+  const lista = (_citasHoyIntentos[ip] || []).filter(t => ahora - t < 600000);
+  if (lista.length >= 200) return res.status(429).json({ mensaje: 'Demasiadas consultas. Espera unos minutos.' });
+  lista.push(ahora); _citasHoyIntentos[ip] = lista;
+
+  const q = (req.query.q || '').toString().trim();
+  if (q.length < 3) return res.json({ citas: [] });
+  const pool = new Pool({
+    host: process.env.PG_HOST || 'localhost',
+    port: parseInt(process.env.PG_PORT || '5432'),
+    database: process.env.PG_DATABASE || 'stemwell',
+    user: process.env.PG_USER || 'crm_user',
+    password: process.env.PG_PASSWORD,
+  });
+  try {
+    const norm = s => (s || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const palabras = norm(q).split(/\s+/).filter(Boolean);
+    const r = await pool.query(
+      `SELECT c.id AS cita_id, c.lead_id, l.nombre, c.hora_inicio, c.tipo_atencion, l.eps, l.numero_documento, c.llegada_en
+       FROM citas c JOIN leads l ON l.id = c.lead_id
+       WHERE c.fecha_cita = (NOW() AT TIME ZONE 'America/Bogota')::date AND c.lead_id IS NOT NULL
+         AND lower(coalesce(c.estado_cita, '')) NOT IN
+             ('anulado','cancelado','cancelada','canceled','cancelled','reagendado','rescheduled','cambio de fecha')
+       ORDER BY c.hora_inicio NULLS LAST, c.id`);
+    const vistos = new Set();
+    const citas = [];
+    for (const f of r.rows) {
+      if (vistos.has(f.lead_id)) continue;
+      const n = norm(f.nombre);
+      if (!palabras.every(p => n.includes(p))) continue;
+      vistos.add(f.lead_id);
+      const doc = (f.numero_documento || '').toString();
+      citas.push({
+        cita_id: f.cita_id, nombre: f.nombre, hora: f.hora_inicio ? String(f.hora_inicio).slice(0, 5) : '',
+        motivo: f.tipo_atencion || '', eps: f.eps || '',
+        documento_mascara: doc.length >= 5 ? '•••• ' + doc.slice(-3) : (doc ? '••••' : ''),
+        tiene_documento: !!doc, ya_llego: !!f.llegada_en
+      });
+      if (citas.length >= 6) break;
+    }
+    res.json({ citas });
+  } catch (err) {
+    console.error('❌ Error buscando citas de hoy:', err);
+    res.status(500).json({ mensaje: 'Error interno del servidor' });
+  } finally {
+    await pool.end();
+  }
+});
+
+// ============================================
 // RUTA: LISTA DE VISITANTES DE HOY PENDIENTES DE MARCAR SALIDA
 // ============================================
 app.get('/consentimiento/registro/pendientes/lista', async (req, res) => {
@@ -593,7 +887,7 @@ app.get('/consentimiento/registro/pendientes/lista', async (req, res) => {
     port: parseInt(process.env.PG_PORT || '5432'),
     database: process.env.PG_DATABASE || 'stemwell',
     user: process.env.PG_USER || 'crm_user',
-    password: process.env.PG_PASSWORD || 'crm2024',
+    password: process.env.PG_PASSWORD,
   });
 
   try {
@@ -629,7 +923,7 @@ app.get('/consentimiento/registro/planilla/datos', async (req, res) => {
     port: parseInt(process.env.PG_PORT || '5432'),
     database: process.env.PG_DATABASE || 'stemwell',
     user: process.env.PG_USER || 'crm_user',
-    password: process.env.PG_PASSWORD || 'crm2024',
+    password: process.env.PG_PASSWORD,
   });
 
   try {
@@ -661,7 +955,7 @@ app.get('/consentimiento/registro/planilla/firma/:id', async (req, res) => {
     port: parseInt(process.env.PG_PORT || '5432'),
     database: process.env.PG_DATABASE || 'stemwell',
     user: process.env.PG_USER || 'crm_user',
-    password: process.env.PG_PASSWORD || 'crm2024',
+    password: process.env.PG_PASSWORD,
   });
 
   try {
@@ -689,7 +983,7 @@ app.post('/consentimiento/registro/pendientes/:id/salida', async (req, res) => {
     port: parseInt(process.env.PG_PORT || '5432'),
     database: process.env.PG_DATABASE || 'stemwell',
     user: process.env.PG_USER || 'crm_user',
-    password: process.env.PG_PASSWORD || 'crm2024',
+    password: process.env.PG_PASSWORD,
   });
 
   try {
@@ -711,6 +1005,18 @@ app.post('/consentimiento/registro/pendientes/:id/salida', async (req, res) => {
     }
 
     console.log(`✅ Salida registrada: visitante #${id} a las ${hora_salida}`);
+
+    // Si la visita estaba enlazada con una cita de hoy, la salida queda marcada también en Front desk.
+    try {
+      const u = await pool.query(
+        `UPDATE citas SET salida_en = NOW(), salida_origen = 'planilla'
+         WHERE salida_en IS NULL AND llegada_en IS NOT NULL
+           AND fecha_cita = (NOW() AT TIME ZONE 'America/Bogota')::date
+           AND lead_id = (SELECT c.lead_id FROM registro_visitantes v JOIN citas c ON c.id = v.cita_id WHERE v.id = $1)`, [id]);
+      if (u.rowCount) console.log(`🚪 Salida marcada en el CRM desde la planilla: ${u.rowCount} cita(s)`);
+    } catch (e) {
+      console.error('⚠️ No se pudo marcar la salida en el CRM:', e.message);
+    }
     res.json({ mensaje: 'Hora de salida registrada' });
   } catch (err) {
     console.error('❌ Error registrando salida:', err);
@@ -732,7 +1038,7 @@ app.post('/consentimiento/admision-cirugias/guardar', async (req, res) => {
     port: parseInt(process.env.PG_PORT || '5432'),
     database: process.env.PG_DATABASE || 'stemwell',
     user: process.env.PG_USER || 'crm_user',
-    password: process.env.PG_PASSWORD || 'crm2024',
+    password: process.env.PG_PASSWORD,
   });
 
   try {
@@ -803,7 +1109,7 @@ app.post('/consentimiento/paciente-nuevo/guardar', async (req, res) => {
     port: parseInt(process.env.PG_PORT || '5432'),
     database: process.env.PG_DATABASE || 'stemwell',
     user: process.env.PG_USER || 'crm_user',
-    password: process.env.PG_PASSWORD || 'crm2024',
+    password: process.env.PG_PASSWORD,
   });
 
   try {
@@ -867,7 +1173,7 @@ app.post('/consentimiento/equipos/guardar', async (req, res) => {
     port: parseInt(process.env.PG_PORT || '5432'),
     database: process.env.PG_DATABASE || 'stemwell',
     user: process.env.PG_USER || 'crm_user',
-    password: process.env.PG_PASSWORD || 'crm2024',
+    password: process.env.PG_PASSWORD,
   });
 
   try {
@@ -914,7 +1220,7 @@ app.get('/consentimiento/encuesta/resumen', async (req, res) => {
     port: parseInt(process.env.PG_PORT || '5432'),
     database: process.env.PG_DATABASE || 'stemwell',
     user: process.env.PG_USER || 'crm_user',
-    password: process.env.PG_PASSWORD || 'crm2024',
+    password: process.env.PG_PASSWORD,
   });
 
   try {
@@ -1169,17 +1475,17 @@ async function recordMessageStatus(status) {
       port: parseInt(process.env.PG_PORT || '5432'),
       database: process.env.PG_DATABASE || 'stemwell',
       user: process.env.PG_USER || 'crm_user',
-      password: process.env.PG_PASSWORD || 'crm2024',
+      password: process.env.PG_PASSWORD,
       max: 2,
     });
   }
   const error = (status.errors || [])[0] || {};
   const at = Number(status.timestamp) > 0 ? new Date(Number(status.timestamp) * 1000) : new Date();
   await statusPool.query(
-    `INSERT INTO wa_message_statuses (wa_message_id, status, status_at, error_code, error_title)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO wa_message_statuses (wa_message_id, status, status_at, error_code, error_title, recipient)
+     VALUES ($1, $2, $3, $4, $5, $6)
      ON CONFLICT (wa_message_id, status) DO NOTHING`,
-    [status.id, status.status, at, error.code || null, (error.title || error.message || null)],
+    [status.id, status.status, at, error.code || null, (error.title || error.message || null), status.recipient_id || null],
   );
 }
 

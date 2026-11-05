@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title id="page-title">Planilla de Registro · Stemwell</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --verde: #00B2C2; --verde-claro: #E6F7F9; --texto: #1C2B26; --gris: #6B7B76;
+    --borde: #D4E6DF; --fondo: #F7FAF8; --blanco: #FFFFFF; --error: #C0392B; --max-w: 560px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Poppins', sans-serif; background: var(--fondo); color: var(--texto); min-height: 100vh; display: flex; flex-direction: column; }
+  .header { background: var(--blanco); border-bottom: 1px solid var(--borde); padding: 10px 24px; display: flex; align-items: center; position: sticky; top: 0; z-index: 10; }
+  .header img { height: 54px; width: auto; }
+  .container { max-width: var(--max-w); width: 100%; margin: 0 auto; padding: 14px 20px 24px; flex: 1; display: flex; flex-direction: column; justify-content: center; }
+  @media (min-width: 700px) { :root { --max-w: 680px; } }
+  @media (min-width: 1000px) { :root { --max-w: 900px; } }
+  @media (min-width: 1300px) { :root { --max-w: 1100px; } }
+  @media (min-width: 1600px) { :root { --max-w: 1350px; } }
+  @media (min-width: 1850px) { :root { --max-w: 1650px; } }
+  .titulo-simple { margin-bottom: clamp(12px, 1.4vh, 18px); }
+  .titulo-simple h2 { font-size: clamp(22px, 2.6vw, 36px); font-weight: 800; color: var(--verde); margin-bottom: 6px; }
+  .titulo-simple p { font-size: clamp(13px, 1vw, 15px); color: var(--gris); line-height: 1.4; }
+  .section { background: var(--blanco); border-radius: 16px; padding: clamp(16px, 2.2vh, 26px) clamp(18px, 1.8vw, 26px); margin-bottom: clamp(10px, 1.6vh, 16px); border: 1px solid var(--borde); }
+  .section-title { font-size: clamp(12px, 1vw, 13.5px); font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--verde); margin-bottom: clamp(10px, 1.8vh, 18px); }
+  .field { margin-bottom: clamp(10px, 1.6vh, 16px); }
+  .field:last-child { margin-bottom: 0; }
+  label.campo-label { display: block; font-size: clamp(12.5px, 1vw, 15px); font-weight: 500; color: var(--gris); margin-bottom: 6px; }
+  label.campo-label span.req { color: var(--verde); margin-left: 2px; }
+  input[type="text"], input[type="tel"], input[type="date"], input[type="time"], select {
+    width: 100%; padding: clamp(11px, 1.5vh, 15px) 16px; border: 1.5px solid var(--borde); border-radius: 11px;
+    font-family: 'Poppins', sans-serif; font-size: clamp(15px, 1.3vw, 19px); color: var(--texto); background: var(--fondo);
+    transition: border-color .2s, box-shadow .2s; -webkit-appearance: none;
+  }
+  input:focus, select:focus { outline: none; border-color: var(--verde); box-shadow: 0 0 0 3px rgba(0,178,194,.12); background: var(--blanco); }
+  input.error, select.error { border-color: var(--error); }
+  .field-error { font-size: 11.5px; color: var(--error); margin-top: 4px; display: none; }
+  .field-error.show { display: block; }
+
+  .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 460px) { .row-2 { grid-template-columns: 1fr; } }
+
+  /* ── AUTOCOMPLETAR VISITANTES YA REGISTRADOS ──
+     Segunda+ visita: en vez de volver a escribir todo (y equivocarse),
+     eligen su nombre/documento de una lista y se rellena el resto. */
+  .campo-autocomplete { position: relative; }
+  .autocomplete-lista {
+    display: none; position: absolute; left: 0; right: 0; top: calc(100% + 4px);
+    background: var(--blanco); border: 1.5px solid var(--borde); border-radius: 12px;
+    box-shadow: 0 10px 28px rgba(0,0,0,.12); max-height: 260px; overflow-y: auto; z-index: 30;
+  }
+  .autocomplete-lista.mostrar { display: block; }
+  .autocomplete-item { padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--borde); }
+  .autocomplete-item:last-child { border-bottom: none; }
+  .autocomplete-item:hover, .autocomplete-item.activo { background: var(--verde-claro); }
+  .autocomplete-item .ac-nombre { font-size: 14.5px; font-weight: 600; color: var(--texto); }
+  .autocomplete-item .ac-documento { font-size: 12.5px; color: var(--gris); margin-top: 2px; }
+  .autocomplete-vacio { padding: 12px 16px; font-size: 13px; color: var(--gris); }
+
+  /* Red de seguridad para pantallas bajas (poco alto disponible): reduce el espaciado para seguir cabiendo sin scroll, sin afectar el tamaño amplio que se usa en la tablet real (1920x1080). */
+  @media (max-height: 820px) {
+    .header { padding: 6px 24px; }
+    .header img { height: 40px; }
+    .titulo-simple { margin-bottom: 6px !important; }
+    .titulo-simple h2 { font-size: 22px !important; }
+    .titulo-simple p { display: none; }
+    .section { padding: 10px clamp(16px, 1.6vw, 22px) !important; margin-bottom: 6px !important; }
+    .field { margin-bottom: 6px !important; }
+    input[type="text"], input[type="tel"], input[type="email"], input[type="date"], input[type="time"], textarea { padding: 7px 14px !important; }
+    textarea { min-height: 46px !important; }
+  }
+
+  /* En tablet/escritorio los datos van a la izquierda y la firma a la
+     derecha, aprovechando el ancho en vez de apilar todo verticalmente
+     (que obliga a mucho scroll en una tablet). */
+  @media (min-width: 900px) {
+    .registro-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: stretch; }
+    .registro-columna-izquierda { display: flex; flex-direction: column; }
+    .registro-columna-izquierda .section { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+    .registro-columna-derecha { display: flex; flex-direction: column; height: 100%; }
+    .registro-columna-derecha .section { display: flex; flex-direction: column; flex: 1; }
+    .registro-columna-derecha .firma-wrap { flex: 1; display: flex; flex-direction: column; }
+    .registro-columna-derecha canvas.firma-canvas { flex: 1; height: auto; min-height: 320px; }
+    .registro-columna-derecha .botones-form { margin-top: 16px; }
+  }
+
+  /* ── FIRMA (CANVAS) ── */
+  .firma-wrap {
+    position: relative; border: 2px dashed var(--borde); border-radius: 14px;
+    background: var(--fondo); overflow: hidden; transition: border-color .2s;
+  }
+  .firma-wrap.activo { border-color: var(--verde); border-style: solid; }
+  .firma-hint {
+    position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; pointer-events: none; transition: opacity .3s; gap: 6px;
+  }
+  .firma-hint svg { opacity: .25; }
+  .firma-hint p { font-size: 12.5px; color: var(--gris); opacity: .7; font-weight: 400; }
+  canvas.firma-canvas { display: block; width: 100%; height: min(30vh, 260px); touch-action: none; cursor: crosshair; }
+  .firma-actions { display: flex; justify-content: flex-end; padding: 8px 12px; border-top: 1px solid var(--borde); background: var(--blanco); }
+  .btn-limpiar {
+    font-size: 12px; color: var(--gris); background: none; border: 1px solid var(--borde); border-radius: 7px;
+    padding: 5px 12px; cursor: pointer; font-family: 'Poppins', sans-serif; transition: all .2s;
+  }
+  .btn-limpiar:hover { border-color: var(--error); color: var(--error); }
+  .firma-error { font-size: 11.5px; color: var(--error); margin-top: 6px; display: none; }
+  .firma-error.show { display: block; }
+
+  .btn-enviar {
+    width: 100%; padding: 16px; background: var(--verde); color: white; border: none; border-radius: 14px;
+    font-family: 'Poppins', sans-serif; font-size: 16.5px; font-weight: 600; cursor: pointer; transition: all .2s;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+  }
+  .btn-enviar:hover:not(:disabled) { background: #0093a0; transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,178,194,.3); }
+  .btn-enviar:disabled { opacity: .6; cursor: not-allowed; }
+  .btn-secundario {
+    padding: 14px 22px; background: none; color: var(--gris); border: 1.5px solid var(--borde); border-radius: 14px;
+    font-family: 'Poppins', sans-serif; font-size: 14.5px; font-weight: 500; cursor: pointer; transition: all .2s; white-space: nowrap;
+  }
+  .btn-secundario:hover { border-color: var(--verde); color: var(--verde); }
+  .botones-form { display: flex; gap: 12px; margin-top: 6px; }
+  .botones-form .btn-enviar { flex: 1; }
+  .spinner { width: 20px; height: 20px; border: 2px solid rgba(255,255,255,.3); border-top-color: white; border-radius: 50%; animation: spin .7s linear infinite; display: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #pantalla-exito { display: none; flex-direction: column; align-items: center; text-align: center; padding: 60px 24px; }
+  .exito-icono { width: 80px; height: 80px; background: var(--verde-claro); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 22px; }
+  .exito-icono svg { width: 40px; height: 40px; }
+  #pantalla-exito h2 { font-size: 24px; color: var(--verde); margin-bottom: 10px; font-weight: 700; }
+  #pantalla-exito p { font-size: 14.5px; color: var(--gris); line-height: 1.65; max-width: 360px; }
+
+  /* ── EFECTO "RIPPLE" AL TOCAR (feedback moderno) ── */
+  .ripple-host { position: relative; }
+  .ripple-host:not(.icono-esquina) { overflow: hidden; }
+  .ripple-host:active { transform: scale(.97); }
+  .ripple-wave {
+    position: absolute; border-radius: 50%; transform: scale(0); opacity: .55;
+    background: currentColor; mix-blend-mode: overlay; pointer-events: none;
+    animation: ripple-expandir .6s ease-out forwards;
+  }
+  .ripple-host.ripple-clara .ripple-wave { background: var(--verde); mix-blend-mode: normal; opacity: .18; }
+  @keyframes ripple-expandir { to { transform: scale(1); opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .ripple-wave { display: none; } }
+  /* Puerta del evento: pregunta de grabación + documento firmable */
+  #pantalla-grabacion { max-width: 820px; margin: 0 auto; padding: 8px 4px 40px; }
+  #pantalla-grabacion h2 { font-size: 22px; margin: 6px 0 8px; }
+  #pantalla-grabacion p { font-size: 15px; line-height: 1.5; margin: 0 0 14px; }
+  .gr-botones { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 18px; }
+  .gr-botones button { flex: 1 1 220px; min-height: 56px; font-size: 17px; }
+  .gr-paginas { max-height: 56vh; overflow-y: auto; border: 1px solid var(--borde); border-radius: 10px; background: #fff; padding: 8px; }
+  .gr-paginas img { display: block; width: 100%; height: auto; margin: 0 0 10px; border: 1px solid var(--borde); }
+  .gr-acepto { display: flex; gap: 10px; align-items: flex-start; margin: 14px 0 6px; font-size: 15px; line-height: 1.4; }
+  .gr-acepto input { width: 22px; height: 22px; margin-top: 2px; flex: none; }
+  /* Puerta del evento: servicios que desea realizarse */
+  #pantalla-servicios { max-width: 820px; margin: 0 auto; padding: 8px 4px 40px; }
+  #pantalla-servicios h2 { font-size: 22px; margin: 6px 0 8px; }
+  #pantalla-servicios p { font-size: 15px; line-height: 1.5; margin: 0 0 14px; }
+  .sv-lista { display: flex; flex-direction: column; gap: 12px; }
+  .sv-item { display: flex; gap: 14px; align-items: center; padding: 16px 18px; border: 2px solid var(--borde); border-radius: 14px; background: #fff; cursor: pointer; font-size: 17px; }
+  .sv-item.on { border-color: var(--verde); background: #E7F6EF; }
+  .sv-item input { width: 26px; height: 26px; flex: none; }
+  .sv-item small { display: block; font-size: 13px; opacity: .7; }
+</style>
+</head>
+<body>
+
+<header class="header"><img src="/images/STEMWELL_LOGO_.png" alt="Stemwell" /></header>
+
+<div class="container">
+  <div id="pantalla-form">
+    <div class="titulo-simple">
+      <h2 id="txt-titulo">&nbsp;</h2>
+      <p id="txt-intro"></p>
+    </div>
+
+    <div class="registro-2col">
+    <div class="registro-columna-izquierda">
+    <div class="section">
+      <div class="section-title" id="txt-section-visitante"></div>
+      <div class="row-2">
+        <div class="field">
+          <label class="campo-label" id="lbl-fecha"></label>
+          <input type="date" id="fecha" />
+          <div class="field-error" id="err-fecha"></div>
+        </div>
+        <div class="field campo-autocomplete">
+          <label class="campo-label" id="lbl-nombre"></label>
+          <input type="text" id="nombre" autocomplete="off" />
+          <div class="autocomplete-lista" id="sugerencias-nombre"></div>
+          <div class="field-error" id="err-nombre"></div>
+        </div>
+      </div>
+      <div class="row-2">
+        <div class="field campo-autocomplete">
+          <label class="campo-label" id="lbl-documento"></label>
+          <input type="text" id="documento" inputmode="numeric" autocomplete="off" />
+          <div class="autocomplete-lista" id="sugerencias-documento"></div>
+          <div class="field-error" id="err-documento"></div>
+        </div>
+        <div class="field">
+          <label class="campo-label" id="lbl-rh"></label>
+          <select id="rh">
+            <option value="">…</option>
+            <option value="O+">O+</option>
+            <option value="O-">O-</option>
+            <option value="A+">A+</option>
+            <option value="A-">A-</option>
+            <option value="B+">B+</option>
+            <option value="B-">B-</option>
+            <option value="AB+">AB+</option>
+            <option value="AB-">AB-</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label class="campo-label" id="lbl-motivo"></label>
+        <input type="text" id="motivo" />
+        <div class="field-error" id="err-motivo"></div>
+      </div>
+      <div class="field">
+        <label class="campo-label" id="lbl-eps"></label>
+        <input type="text" id="eps" />
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title" id="txt-section-emergencia"></div>
+      <div class="row-2">
+        <div class="field">
+          <label class="campo-label" id="lbl-contacto"></label>
+          <input type="text" id="contacto" />
+          <div class="field-error" id="err-contacto"></div>
+        </div>
+        <div class="field">
+          <label class="campo-label" id="lbl-telefono"></label>
+          <input type="tel" id="telefono" inputmode="tel" />
+          <div class="field-error" id="err-telefono"></div>
+        </div>
+      </div>
+      <div class="field">
+        <label class="campo-label" id="lbl-hora-ingreso"></label>
+        <input type="time" id="hora-ingreso" />
+      </div>
+    </div>
+    </div>
+
+    <div class="registro-columna-derecha">
+    <div class="section">
+      <div class="section-title" id="txt-section-firma"></div>
+      <div class="firma-wrap" id="firma-wrap">
+        <div class="firma-hint" id="firma-hint">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          <p id="txt-firma-hint"></p>
+        </div>
+        <canvas class="firma-canvas" id="firma-canvas"></canvas>
+        <div class="firma-actions"><button class="btn-limpiar" id="btn-limpiar-firma" type="button"></button></div>
+      </div>
+      <div class="field-error" id="err-firma"></div>
+    </div>
+
+    <div class="botones-form">
+      <button class="btn-secundario" id="btn-inicio" type="button"></button>
+      <button class="btn-enviar" id="btn-enviar" type="button">
+        <span id="btn-texto"></span>
+        <div class="spinner" id="spinner"></div>
+      </button>
+    </div>
+    </div>
+    </div>
+  </div>
+
+  <!-- Puerta del evento: ¿desea ser grabado? Si sí, lee y firma el documento -->
+  <div id="pantalla-grabacion" style="display:none">
+    <div id="gr-pregunta">
+      <h2 id="gr-titulo"></h2>
+      <p id="gr-texto"></p>
+      <div class="gr-botones">
+        <button type="button" class="btn-enviar" id="gr-si"></button>
+        <button type="button" class="btn-secundario" id="gr-no"></button>
+      </div>
+    </div>
+    <div id="gr-doc" style="display:none">
+      <h2 id="gr-doc-titulo"></h2>
+      <p id="gr-doc-ayuda"></p>
+      <div id="gr-paginas" class="gr-paginas"></div>
+      <label class="gr-acepto"><input type="checkbox" id="gr-leido"> <span id="gr-leido-txt"></span></label>
+      <div class="section-title" id="gr-firma-titulo"></div>
+      <div class="firma-wrap" id="gr-firma-wrap">
+        <canvas class="firma-canvas" id="gr-canvas" style="height:220px"></canvas>
+        <div class="firma-actions"><button class="btn-limpiar" id="gr-limpiar" type="button"></button></div>
+      </div>
+      <div class="field-error" id="gr-err"></div>
+      <div class="gr-botones">
+        <button type="button" class="btn-secundario" id="gr-atras"></button>
+        <button type="button" class="btn-enviar" id="gr-firmar"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Puerta del evento: ¿qué desea realizarse? -->
+  <div id="pantalla-servicios" style="display:none">
+    <h2 id="sv-titulo"></h2>
+    <p id="sv-texto"></p>
+    <div id="sv-lista" class="sv-lista"></div>
+    <div class="field-error" id="sv-err"></div>
+    <div class="gr-botones">
+      <button type="button" class="btn-secundario" id="sv-volver"></button>
+      <button type="button" class="btn-enviar" id="sv-continuar"></button>
+    </div>
+  </div>
+
+  <div id="pantalla-exito">
+    <div class="exito-icono">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#1A7A5E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/>
+      </svg>
+    </div>
+    <h2 id="txt-gracias-titulo"></h2>
+    <p id="txt-gracias-texto"></p>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var TEXTOS = {
+    es: {
+      tituloPagina: 'Planilla de Registro · Stemwell',
+      titulo: 'Planilla de Registro',
+      intro: 'Registra tu visita a nuestras instalaciones. Código SGSST-F02.',
+      sectionVisitante: 'Datos del visitante',
+      sectionEmergencia: 'Contacto de emergencia',
+      sectionFirma: 'Firma',
+      fecha: 'Fecha', nombre: 'Nombre', documento: 'Documento', rh: 'RH',
+      motivo: 'Motivo de visita', eps: 'EPS',
+      contacto: 'Contacto de emergencia', telefono: 'Número telefónico',
+      horaIngreso: 'Hora de ingreso',
+      erFecha: 'Selecciona la fecha', erNombre: 'Ingresa el nombre',
+      erDocumento: 'Ingresa el documento', erMotivo: 'Ingresa el motivo de visita',
+      erContacto: 'Ingresa el contacto de emergencia', erTelefono: 'Ingresa el número telefónico',
+      firmaHint: 'Firma aquí', limpiar: '✕ Limpiar', erFirma: 'Debes firmar para continuar',
+      inicio: '← Inicio', enviar: 'Guardar registro', enviando: 'Guardando…',
+      graciasTitulo: '¡Registro guardado!', graciasTexto: 'Tu visita quedó registrada correctamente.',
+      errorGuardar: 'Hubo un problema al guardar el registro. Verifica la conexión e intenta de nuevo.'
+    },
+    en: {
+      tituloPagina: 'Registration Log · Stemwell',
+      titulo: 'Registration Log',
+      intro: 'Register your visit to our facility. Code SGSST-F02.',
+      sectionVisitante: 'Visitor information',
+      sectionEmergencia: 'Emergency contact',
+      sectionFirma: 'Signature',
+      fecha: 'Date', nombre: 'Name', documento: 'ID document', rh: 'Blood type',
+      motivo: 'Reason for visit', eps: 'Health insurance (EPS)',
+      contacto: 'Emergency contact', telefono: 'Phone number',
+      horaIngreso: 'Check-in time',
+      erFecha: 'Please select a date', erNombre: 'Enter the name',
+      erDocumento: 'Enter the ID document', erMotivo: 'Enter the reason for visit',
+      erContacto: 'Enter the emergency contact', erTelefono: 'Enter the phone number',
+      firmaHint: 'Sign here', limpiar: '✕ Clear', erFirma: 'You must sign to continue',
+      inicio: '← Home', enviar: 'Save registration', enviando: 'Saving…',
+      graciasTitulo: 'Registration saved!', graciasTexto: 'Your visit was recorded successfully.',
+      errorGuardar: 'There was a problem saving the registration. Check your connection and try again.'
+    }
+  };
+
+  var params = new URLSearchParams(window.location.search);
+  var lang = params.get('lang') === 'en' ? 'en' : 'es';
+  var t = TEXTOS[lang];
+  document.documentElement.lang = lang;
+
+  document.getElementById('page-title').textContent = t.tituloPagina;
+  document.getElementById('txt-titulo').textContent = t.titulo;
+  document.getElementById('txt-intro').textContent = t.intro;
+  document.getElementById('txt-section-visitante').textContent = t.sectionVisitante;
+  document.getElementById('txt-section-emergencia').textContent = t.sectionEmergencia;
+  document.getElementById('txt-section-firma').textContent = t.sectionFirma;
+  document.getElementById('lbl-fecha').innerHTML = t.fecha + ' <span class="req">*</span>';
+  document.getElementById('lbl-nombre').innerHTML = t.nombre + ' <span class="req">*</span>';
+  document.getElementById('lbl-documento').innerHTML = t.documento + ' <span class="req">*</span>';
+  document.getElementById('lbl-rh').textContent = t.rh;
+  document.getElementById('lbl-motivo').innerHTML = t.motivo + ' <span class="req">*</span>';
+  document.getElementById('lbl-eps').textContent = t.eps;
+  document.getElementById('lbl-contacto').innerHTML = t.contacto + ' <span class="req">*</span>';
+  document.getElementById('lbl-telefono').innerHTML = t.telefono + ' <span class="req">*</span>';
+  document.getElementById('lbl-hora-ingreso').textContent = t.horaIngreso;
+  document.getElementById('err-fecha').textContent = t.erFecha;
+  document.getElementById('err-nombre').textContent = t.erNombre;
+  document.getElementById('err-documento').textContent = t.erDocumento;
+  document.getElementById('err-motivo').textContent = t.erMotivo;
+  document.getElementById('err-contacto').textContent = t.erContacto;
+  document.getElementById('err-telefono').textContent = t.erTelefono;
+  document.getElementById('txt-firma-hint').textContent = t.firmaHint;
+  document.getElementById('btn-limpiar-firma').textContent = t.limpiar;
+  document.getElementById('err-firma').textContent = t.erFirma;
+  document.getElementById('btn-inicio').textContent = t.inicio;
+  document.getElementById('btn-texto').textContent = t.enviar;
+  document.getElementById('txt-gracias-titulo').textContent = t.graciasTitulo;
+  document.getElementById('txt-gracias-texto').textContent = t.graciasTexto;
+
+  document.getElementById('btn-inicio').addEventListener('click', function () {
+    window.location.href = '/consentimiento/?lang=' + lang;
+  });
+
+  // Fecha y hora de ingreso precargadas con el momento actual (el visitante
+  // puede ajustarlas si lo necesita).
+  var ahora = new Date();
+  document.getElementById('fecha').value = ahora.toISOString().slice(0, 10);
+  document.getElementById('hora-ingreso').value =
+    String(ahora.getHours()).padStart(2, '0') + ':' + String(ahora.getMinutes()).padStart(2, '0');
+
+  // ── PRE-LLENADO DESDE EL QR DE UN EVENTO ────────────────────────────────
+  // ?evento=CODIGO: trae los datos del registro confirmado; la persona solo revisa y firma.
+  var eventoToken = params.get('evento') || '';
+  var eventoInfo = null;
+  if (/^[A-Za-z0-9_-]{8,64}$/.test(eventoToken)) {
+    fetch('/consentimiento/registro/evento/' + encodeURIComponent(eventoToken))
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (d) {
+        var aviso = document.createElement('div');
+        aviso.style.cssText = 'margin:12px 0;padding:12px 14px;border-radius:10px;font-size:14px;line-height:1.4;';
+        if (!d) {
+          eventoToken = '';
+          aviso.style.cssText += 'background:#FDECEA;color:#8A1C13';
+          aviso.textContent = lang === 'en'
+            ? 'We could not load your event registration. Please fill in the form.'
+            : 'No pudimos cargar tu registro del evento. Completa la planilla manualmente.';
+        } else {
+          eventoInfo = d;
+          document.getElementById('nombre').value = d.nombre || '';
+          document.getElementById('documento').value = d.cedula || '';
+          document.getElementById('rh').value = d.rh || '';
+          document.getElementById('eps').value = d.eps || '';
+          document.getElementById('contacto').value = d.contacto_emergencia || '';
+          document.getElementById('telefono').value = d.telefono_emergencia || '';
+          document.getElementById('motivo').value = d.evento || 'Evento';
+          ['nombre', 'documento', 'contacto', 'telefono'].forEach(function (id) { marcarError(id, false); });
+          aviso.style.cssText += 'background:#E7F6EF;color:#14573F';
+          aviso.textContent = (lang === 'en' ? 'Hi ' : 'Hola ') + (d.nombre || '').split(' ')[0] + (lang === 'en'
+            ? ', your details are already filled in. Review them and sign.'
+            : ', tus datos ya están cargados. Revísalos y firma.') + (d.asistio ? (lang === 'en' ? ' (Your entry was already recorded.)' : ' (Tu ingreso ya estaba registrado.)') : '');
+        }
+        var intro = document.getElementById('txt-intro');
+        intro.parentNode.insertBefore(aviso, intro.nextSibling);
+      })
+      .catch(function () { eventoToken = ''; });
+  }
+
+  // ── AUTOCOMPLETAR VISITANTES YA REGISTRADOS ─────────────────────────────
+  // Trae la lista una sola vez al cargar; si falla (sin conexión, etc.) el
+  // formulario sigue funcionando normal, solo sin sugerencias.
+  var visitantesPrevios = [];
+  fetch('/consentimiento/registro/visitantes-previos')
+    .then(function (res) { return res.ok ? res.json() : { visitantes: [] }; })
+    .then(function (data) { visitantesPrevios = data.visitantes || []; })
+    .catch(function () { visitantesPrevios = []; });
+
+  function normalizar(s) {
+    return (s || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  }
+
+  function rellenarDesdeVisitante(v) {
+    document.getElementById('nombre').value = v.nombre;
+    document.getElementById('documento').value = v.documento;
+    document.getElementById('rh').value = v.rh || '';
+    document.getElementById('eps').value = v.eps || '';
+    document.getElementById('contacto').value = v.contacto_emergencia || '';
+    document.getElementById('telefono').value = v.telefono || '';
+    marcarError('nombre', false); marcarError('documento', false);
+    marcarError('contacto', false); marcarError('telefono', false);
+  }
+
+  function configurarAutocomplete(inputId, listaId, campo) {
+    var input = document.getElementById(inputId);
+    var lista = document.getElementById(listaId);
+
+    function ocultar() { lista.classList.remove('mostrar'); lista.innerHTML = ''; }
+
+    input.addEventListener('input', function () {
+      var q = normalizar(input.value.trim());
+      if (q.length < 2) { ocultar(); return; }
+      var coincidencias = visitantesPrevios.filter(function (v) {
+        return normalizar(v[campo]).indexOf(q) !== -1;
+      }).slice(0, 8);
+      if (!coincidencias.length) { ocultar(); return; }
+      lista.innerHTML = coincidencias.map(function (v) {
+        return '<div class="autocomplete-item">' +
+          '<div class="ac-nombre">' + escapeHtml(v.nombre) + '</div>' +
+          '<div class="ac-documento">' + escapeHtml(v.documento) + '</div>' +
+        '</div>';
+      }).join('');
+      Array.prototype.forEach.call(lista.querySelectorAll('.autocomplete-item'), function (el, i) {
+        el.addEventListener('click', function () { rellenarDesdeVisitante(coincidencias[i]); ocultar(); });
+      });
+      lista.classList.add('mostrar');
+    });
+
+    input.addEventListener('blur', function () { setTimeout(ocultar, 150); });
+  }
+
+  function escapeHtml(s) {
+    return (s || '').toString().replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  configurarAutocomplete('nombre', 'sugerencias-nombre', 'nombre');
+  configurarAutocomplete('documento', 'sugerencias-documento', 'documento');
+
+  // ── FIRMA (CANVAS) ──────────────────────────────────────────────────────
+  var canvas = document.getElementById('firma-canvas');
+  var ctx = canvas.getContext('2d');
+  var wrap = document.getElementById('firma-wrap');
+  var hint = document.getElementById('firma-hint');
+  var pintando = false;
+  var firmaTocada = false;
+
+  function escalarFirma() {
+    var rect = canvas.getBoundingClientRect();
+    var ratio = window.devicePixelRatio || 1;
+    canvas.width = Math.max(1, rect.width * ratio);
+    canvas.height = Math.max(1, rect.height * ratio);
+    ctx.scale(ratio, ratio);
+    ctx.lineWidth = 2.2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#1C2B26';
+  }
+  setTimeout(escalarFirma, 0);
+  window.addEventListener('resize', escalarFirma);
+
+  function posicionFirma(e) {
+    var r = canvas.getBoundingClientRect();
+    if (e.touches && e.touches.length) return { x: e.touches[0].clientX - r.left, y: e.touches[0].clientY - r.top };
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  }
+  function iniciarFirma(e) {
+    e.preventDefault();
+    pintando = true;
+    var p = posicionFirma(e);
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    hint.style.opacity = '0';
+    wrap.classList.add('activo');
+    firmaTocada = true;
+  }
+  function dibujarFirma(e) {
+    e.preventDefault();
+    if (!pintando) return;
+    var p = posicionFirma(e);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+  }
+  function detenerFirma() { pintando = false; }
+
+  canvas.addEventListener('mousedown', iniciarFirma, { passive: false });
+  canvas.addEventListener('mousemove', dibujarFirma, { passive: false });
+  canvas.addEventListener('mouseup', detenerFirma);
+  canvas.addEventListener('mouseleave', detenerFirma);
+  canvas.addEventListener('touchstart', iniciarFirma, { passive: false });
+  canvas.addEventListener('touchmove', dibujarFirma, { passive: false });
+  canvas.addEventListener('touchend', detenerFirma);
+
+  document.getElementById('btn-limpiar-firma').addEventListener('click', function () {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    hint.style.opacity = '1';
+    wrap.classList.remove('activo');
+    firmaTocada = false;
+  });
+
+  function marcarError(id, mostrar) {
+    var el = document.getElementById('err-' + id);
+    var campo = document.getElementById(id);
+    if (el) el.classList.toggle('show', mostrar);
+    if (campo) campo.classList.toggle('error', mostrar);
+  }
+
+  function validar() {
+    var ok = true;
+    if (!document.getElementById('fecha').value) { marcarError('fecha', true); ok = false; } else marcarError('fecha', false);
+    if (!document.getElementById('nombre').value.trim()) { marcarError('nombre', true); ok = false; } else marcarError('nombre', false);
+    if (!document.getElementById('documento').value.trim()) { marcarError('documento', true); ok = false; } else marcarError('documento', false);
+    if (!document.getElementById('motivo').value.trim()) { marcarError('motivo', true); ok = false; } else marcarError('motivo', false);
+    if (!document.getElementById('contacto').value.trim()) { marcarError('contacto', true); ok = false; } else marcarError('contacto', false);
+    if (!document.getElementById('telefono').value.trim()) { marcarError('telefono', true); ok = false; } else marcarError('telefono', false);
+
+    var errFirma = document.getElementById('err-firma');
+    if (!firmaTocada) { errFirma.classList.add('show'); ok = false; } else errFirma.classList.remove('show');
+
+    if (!ok) {
+      var primerError = document.querySelector('.field-error.show');
+      if (primerError) primerError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    return ok;
+  }
+
+  document.getElementById('btn-enviar').addEventListener('click', function () {
+    if (!validar()) return;
+    var btn = document.getElementById('btn-enviar');
+    var texto = document.getElementById('btn-texto');
+    var spinner = document.getElementById('spinner');
+    btn.disabled = true;
+    texto.textContent = t.enviando;
+    spinner.style.display = 'block';
+
+    var payload = {
+      idioma: lang,
+      fecha: document.getElementById('fecha').value,
+      nombre: document.getElementById('nombre').value.trim(),
+      documento: document.getElementById('documento').value.trim(),
+      rh: document.getElementById('rh').value,
+      motivo_visita: document.getElementById('motivo').value.trim(),
+      eps: document.getElementById('eps').value.trim(),
+      contacto_emergencia: document.getElementById('contacto').value.trim(),
+      telefono: document.getElementById('telefono').value.trim(),
+      hora_ingreso: document.getElementById('hora-ingreso').value,
+      firma_img: canvas.toDataURL('image/png'),
+      user_agent: navigator.userAgent,
+      evento_token: eventoToken
+    };
+
+    fetch('/consentimiento/registro/guardar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function (res) {
+      return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+    }).then(function (r) {
+      if (r.ok) {
+        document.getElementById('pantalla-form').style.display = 'none';
+        // Puerta del evento: si aún no respondió, preguntamos si desea ser grabado(a).
+        if (eventoToken && !(eventoInfo && eventoInfo.grabacion_decision)) {
+          mostrarGrabacion();
+          return;
+        }
+        if (eventoToken) { mostrarServicios(); return; }
+        mostrarExito();
+      } else {
+        throw new Error(r.data.mensaje || 'Error del servidor');
+      }
+    }).catch(function (err) {
+      console.error(err);
+      alert(t.errorGuardar + '\n\n' + err.message);
+    }).finally(function () {
+      btn.disabled = false;
+      texto.textContent = t.enviar;
+      spinner.style.display = 'none';
+    });
+  });
+
+  // ── PUERTA DEL EVENTO: ¿QUÉ DESEA REALIZARSE? ───────────────────────────
+  var SVT = {
+    es: { titulo: '¿Qué desea realizarse hoy?', texto: 'Marque lo que le gustaría hacer. Los cupos son limitados; si no desea ninguno, solo toque continuar.', continuar: 'Continuar', volver: '← Volver', quedan: 'quedan', err: 'No se pudo guardar. Intente de nuevo.' },
+    en: { titulo: 'What would you like to do today?', texto: 'Tick what you would like to do. Places are limited; if you do not want any, just tap continue.', continuar: 'Continue', volver: '← Back', quedan: 'left', err: 'Could not save. Please try again.' }
+  };
+  function mostrarServicios() {
+    var x = SVT[lang === 'en' ? 'en' : 'es'];
+    fetch('/consentimiento/registro/evento/' + encodeURIComponent(eventoToken) + '/servicios')
+      .then(function (res) { return res.ok ? res.json() : { servicios: [] }; })
+      .then(function (d) {
+        var lista = d.servicios || [];
+        if (!lista.length) { mostrarExito(); return; }
+        document.getElementById('sv-titulo').textContent = x.titulo;
+        document.getElementById('sv-texto').textContent = x.texto;
+        document.getElementById('sv-continuar').textContent = x.continuar;
+        document.getElementById('sv-volver').textContent = x.volver;
+        var cont = document.getElementById('sv-lista');
+        cont.innerHTML = '';
+        lista.forEach(function (sv) {
+          var lab = document.createElement('label');
+          lab.className = 'sv-item' + (sv.seleccionado ? ' on' : '');
+          var chk = document.createElement('input');
+          chk.type = 'checkbox'; chk.value = sv.clave; chk.checked = !!sv.seleccionado;
+          chk.addEventListener('change', function () { lab.classList.toggle('on', chk.checked); });
+          var txt = document.createElement('span');
+          txt.textContent = sv.nombre;
+          var peq = document.createElement('small');
+          peq.textContent = (sv.detalle || '') + (sv.restantes !== null && sv.restantes !== undefined ? (sv.detalle ? ' · ' : '') + x.quedan + ' ' + sv.restantes : '');
+          txt.appendChild(peq);
+          lab.appendChild(chk); lab.appendChild(txt); cont.appendChild(lab);
+        });
+        document.getElementById('pantalla-grabacion').style.display = 'none';
+        document.getElementById('pantalla-servicios').style.display = 'block';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      })
+      .catch(function () { mostrarExito(); });
+  }
+  // Volver a la pregunta de grabación: la persona puede cambiar de opción (sí <-> no).
+  document.getElementById('sv-volver').addEventListener('click', function () {
+    document.getElementById('sv-err').classList.remove('show');
+    mostrarGrabacion();
+  });
+  document.getElementById('sv-continuar').addEventListener('click', function () {
+    var x = SVT[lang === 'en' ? 'en' : 'es'];
+    var err = document.getElementById('sv-err'); err.classList.remove('show');
+    var elegidos = Array.prototype.map.call(document.querySelectorAll('#sv-lista input:checked'), function (i) { return i.value; });
+    var b = this; b.disabled = true;
+    fetch('/consentimiento/registro/evento/' + encodeURIComponent(eventoToken) + '/servicios', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ servicios: elegidos })
+    }).then(function (res) {
+      return res.json().then(function (d) { if (!res.ok) throw new Error(d.mensaje || x.err); return d; });
+    }).then(function () {
+      document.getElementById('pantalla-servicios').style.display = 'none';
+      mostrarExito();
+    }).catch(function (e) {
+      err.textContent = e.message; err.classList.add('show');
+      mostrarServicios();   // refresca la lista: un cupo pudo llenarse
+    }).finally(function () { b.disabled = false; });
+  });
+
+  function mostrarExito() {
+    document.getElementById('pantalla-grabacion').style.display = 'none';
+    document.getElementById('pantalla-servicios').style.display = 'none';
+    document.getElementById('pantalla-exito').style.display = 'flex';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setTimeout(function () {
+      window.location.href = '/consentimiento/?lang=' + lang;
+    }, 3000);
+  }
+
+  // ── PUERTA DEL EVENTO: ¿DESEA SER GRABADO(A)? ───────────────────────────
+  var GR = {
+    es: {
+      titulo: '¿Desea ser grabado(a) durante el evento?',
+      texto: 'Es opcional. Si dice que sí, leerá y firmará la autorización de uso de imagen en esta tablet. Si dice que no, no pasa nada: puede disfrutar del evento igual.',
+      si: 'Sí, acepto ser grabado(a)', no: 'No, gracias',
+      docTitulo: 'Términos y condiciones — uso de imagen',
+      docAyuda: 'Lea el documento completo (deslice hacia abajo) y firme al final.',
+      leido: 'He leído y acepto los términos y condiciones y autorizo el uso de mi imagen según el numeral 6.3.',
+      firmaTitulo: 'Firma', limpiar: '✕ Limpiar', atras: '← Volver', firmar: 'Firmar y continuar',
+      erLeido: 'Marque que leyó el documento.', erFirma: 'Debe firmar para continuar.', erGuardar: 'No se pudo guardar. Intente de nuevo.'
+    },
+    en: {
+      titulo: 'Would you like to be filmed during the event?',
+      texto: 'It is optional. If you say yes, you will read and sign the image-use authorization on this tablet. If you say no, nothing changes: you can enjoy the event all the same.',
+      si: 'Yes, I agree to be filmed', no: 'No, thanks',
+      docTitulo: 'Terms and conditions — image use',
+      docAyuda: 'Read the whole document (scroll down) and sign at the end.',
+      leido: 'I have read and accept the terms and conditions and authorize the use of my image (section 6.3).',
+      firmaTitulo: 'Signature', limpiar: '✕ Clear', atras: '← Back', firmar: 'Sign and continue',
+      erLeido: 'Please tick that you have read the document.', erFirma: 'You must sign to continue.', erGuardar: 'Could not save. Please try again.'
+    }
+  };
+  var g = GR[lang === 'en' ? 'en' : 'es'];
+  var grCanvas = document.getElementById('gr-canvas');
+  var grCtx = grCanvas.getContext('2d');
+  var grDibujando = false, grTocada = false;
+
+  function grAjustar() {
+    var rect = grCanvas.getBoundingClientRect();
+    var ratio = window.devicePixelRatio || 1;
+    grCanvas.width = Math.max(1, rect.width * ratio);
+    grCanvas.height = Math.max(1, rect.height * ratio);
+    grCtx.scale(ratio, ratio);
+    grCtx.lineWidth = 2.4; grCtx.lineCap = 'round'; grCtx.lineJoin = 'round'; grCtx.strokeStyle = '#111';
+  }
+  function grPos(e) {
+    var r = grCanvas.getBoundingClientRect();
+    var p = e.touches ? e.touches[0] : e;
+    return { x: p.clientX - r.left, y: p.clientY - r.top };
+  }
+  function grInicio(e) { e.preventDefault(); grDibujando = true; var p = grPos(e); grCtx.beginPath(); grCtx.moveTo(p.x, p.y); }
+  function grTrazo(e) {
+    if (!grDibujando) return; e.preventDefault();
+    var p = grPos(e); grCtx.lineTo(p.x, p.y); grCtx.stroke(); grTocada = true;
+    document.getElementById('gr-firma-wrap').classList.add('activo');
+  }
+  function grFin() { grDibujando = false; }
+  grCanvas.addEventListener('mousedown', grInicio, { passive: false });
+  grCanvas.addEventListener('mousemove', grTrazo, { passive: false });
+  grCanvas.addEventListener('mouseup', grFin);
+  grCanvas.addEventListener('mouseleave', grFin);
+  grCanvas.addEventListener('touchstart', grInicio, { passive: false });
+  grCanvas.addEventListener('touchmove', grTrazo, { passive: false });
+  grCanvas.addEventListener('touchend', grFin);
+  document.getElementById('gr-limpiar').addEventListener('click', function () {
+    grCtx.clearRect(0, 0, grCanvas.width, grCanvas.height);
+    grTocada = false;
+    document.getElementById('gr-firma-wrap').classList.remove('activo');
+  });
+
+  function grGuardar(decision, firma) {
+    return fetch('/consentimiento/registro/evento/' + encodeURIComponent(eventoToken) + '/grabacion', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ decision: decision, firma_img: firma || '' })
+    }).then(function (res) {
+      return res.json().then(function (d) { if (!res.ok) throw new Error(d.mensaje || g.erGuardar); return d; });
+    });
+  }
+
+  function mostrarGrabacion() {
+    var g2 = GR[lang === 'en' ? 'en' : 'es']; g = g2;
+    document.getElementById('gr-titulo').textContent = g.titulo;
+    document.getElementById('gr-texto').textContent = g.texto;
+    document.getElementById('gr-si').textContent = g.si;
+    document.getElementById('gr-no').textContent = g.no;
+    document.getElementById('gr-doc-titulo').textContent = g.docTitulo;
+    document.getElementById('gr-doc-ayuda').textContent = g.docAyuda;
+    document.getElementById('gr-leido-txt').textContent = g.leido;
+    document.getElementById('gr-firma-titulo').textContent = g.firmaTitulo;
+    document.getElementById('gr-limpiar').textContent = g.limpiar;
+    document.getElementById('gr-atras').textContent = g.atras;
+    document.getElementById('gr-firmar').textContent = g.firmar;
+    document.getElementById('gr-pregunta').style.display = 'block';
+    document.getElementById('gr-doc').style.display = 'none';
+    document.getElementById('pantalla-servicios').style.display = 'none';
+    document.getElementById('pantalla-grabacion').style.display = 'block';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  document.getElementById('gr-no').addEventListener('click', function () {
+    var b = this; b.disabled = true;
+    grGuardar('no').then(mostrarServicios).catch(function (e) { alert(e.message); }).finally(function () { b.disabled = false; });
+  });
+  document.getElementById('gr-si').addEventListener('click', function () {
+    var cont = document.getElementById('gr-paginas');
+    if (!cont.children.length) {
+      for (var i = 1; i <= 9; i++) {
+        var img = document.createElement('img');
+        img.src = '/consentimiento/registro/terminos/p' + i + '.jpg';
+        img.alt = 'Términos y condiciones, página ' + i + ' de 9';
+        cont.appendChild(img);
+      }
+    }
+    document.getElementById('gr-pregunta').style.display = 'none';
+    document.getElementById('gr-doc').style.display = 'block';
+    grAjustar();
+    grTocada = false;
+    document.getElementById('gr-firma-wrap').classList.remove('activo');
+    document.getElementById('gr-leido').checked = false;
+    document.getElementById('gr-err').classList.remove('show');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+  document.getElementById('gr-atras').addEventListener('click', function () {
+    document.getElementById('gr-doc').style.display = 'none';
+    document.getElementById('gr-pregunta').style.display = 'block';
+  });
+  document.getElementById('gr-firmar').addEventListener('click', function () {
+    var err = document.getElementById('gr-err'); err.classList.remove('show');
+    if (!document.getElementById('gr-leido').checked) { err.textContent = g.erLeido; err.classList.add('show'); return; }
+    if (!grTocada) { err.textContent = g.erFirma; err.classList.add('show'); return; }
+    var b = this; b.disabled = true;
+    grGuardar('si', grCanvas.toDataURL('image/png')).then(mostrarServicios)
+      .catch(function (e) { err.textContent = e.message; err.classList.add('show'); })
+      .finally(function () { b.disabled = false; });
+  });
+
+  // ── EFECTO "RIPPLE" GLOBAL AL TOCAR ──────────────────────────────────────
+  var RIPPLE_SELECTOR = '.btn-enviar, .btn-secundario, .btn-limpiar, .opcion-wrap, .pill-opcion, .check-wrap';
+  var RIPPLE_CLARAS = ['btn-secundario', 'btn-limpiar', 'opcion-wrap', 'check-wrap'];
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest(RIPPLE_SELECTOR);
+    if (!el) return;
+    el.classList.add('ripple-host');
+    el.classList.toggle('ripple-clara', RIPPLE_CLARAS.some(function (c) { return el.classList.contains(c); }));
+    var rect = el.getBoundingClientRect();
+    var size = Math.max(rect.width, rect.height) * 1.6;
+    var onda = document.createElement('span');
+    onda.className = 'ripple-wave';
+    onda.style.width = onda.style.height = size + 'px';
+    onda.style.left = (e.clientX - rect.left - size / 2) + 'px';
+    onda.style.top = (e.clientY - rect.top - size / 2) + 'px';
+    el.appendChild(onda);
+    setTimeout(function () { onda.remove(); }, 650);
+  }, true);
+})();
+</script>
+</body>
+</html>

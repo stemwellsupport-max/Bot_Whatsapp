@@ -5,7 +5,7 @@ const pool = new Pool({
   port:     parseInt(process.env.PG_PORT) || 5432,
   database: process.env.PG_DATABASE || 'stemwell',
   user:     process.env.PG_USER     || 'crm_user',
-  password: process.env.PG_PASSWORD || 'crm2024',
+  password: process.env.PG_PASSWORD,
   ssl:      false,
   max: 10,
   idleTimeoutMillis:    30000,

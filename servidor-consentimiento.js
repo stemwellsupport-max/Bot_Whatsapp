@@ -9,11 +9,11 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Conexión a PostgreSQL LOCAL
 const pool = new Pool({
-  host: 'localhost',
-  port: 5432,
+  host: process.env.PG_HOST || 'localhost',
+  port: Number(process.env.PG_PORT || 5432),
   database: 'stemwell',
   user: 'crm_user',
-  password: 'crm2024',  // La contraseña de tu usuario en PostgreSQL
+  password: process.env.PG_PASSWORD,  // viene del entorno, nunca escrita en el código
   max: 5,
 });
 
