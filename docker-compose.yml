@@ -57,6 +57,9 @@ services:
   ngrok:
     image: ngrok/ngrok:latest
     container_name: bot-ngrok
+    # Apagado desde 2026-11-05: el bot se publica por bot.stemwellco.com (Cloudflare Tunnel del CRM).
+    # Para volver a encenderlo: docker compose --profile ngrok up -d ngrok
+    profiles: ["ngrok"]
     restart: unless-stopped
     command:
       - http
