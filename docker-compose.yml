@@ -37,6 +37,7 @@ services:
       # API del CRM por el nombre de servicio dentro de su red Docker
       CRM_API_URL: http://api:8001
       PORT: "3000"
+      APP_URL: https://bot.stemwellco.com
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
